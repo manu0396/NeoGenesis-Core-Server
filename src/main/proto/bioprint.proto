@@ -1,0 +1,35 @@
+﻿syntax = "proto3";
+
+package com.neogenesis.grpc;
+
+option java_package = "com.neogenesis.grpc";
+option java_multiple_files = true;
+
+service BioPrintService {
+    rpc StreamTelemetryAndControl (stream PrinterTelemetry) returns (stream KinematicCommand);
+}
+
+message PrinterTelemetry {
+    string printer_id = 1;
+    int64 timestamp_ms = 2;
+    float nozzle_temp_celsius = 3;
+    float extrusion_pressure_kpa = 4;
+    float cell_viability_index = 5;
+    bytes encrypted_image_matrix = 6;
+    float bio_ink_viscosity_index = 7;
+    float bio_ink_ph = 8;
+    float nir_ii_temp_celsius = 9;
+    float morphological_defect_probability = 10;
+    string print_job_id = 11;
+    string tissue_type = 12;
+}
+
+message KinematicCommand {
+    string command_id = 1;
+    string action_type = 2;
+    float adjust_pressure = 3;
+    float adjust_speed = 4;
+    float target_nozzle_temp_celsius = 5;
+    float target_pressure_kpa = 6;
+    bool emergency_stop_latched = 7;
+}

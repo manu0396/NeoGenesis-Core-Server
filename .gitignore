@@ -1,0 +1,48 @@
+# ==========================================
+# NeoGenesis Core Server -.gitignore
+# ==========================================
+
+# 1. Gradle - Sistema de Construcción
+.gradle/
+build/
+# (Opcional) Ignorar el directorio de configuración local de Gradle si existe
+gradle-local.properties
+# Excepciones: Sí queremos rastrear el wrapper de Gradle para asegurar consistencia de versiones en CI/CD
+!gradle/wrapper/gradle-wrapper.jar
+
+# 2. IntelliJ IDEA / Android Studio (Archivos del entorno local)
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# 3. Archivos de Ejecución y Logs
+*.log
+*.log.*
+logs/
+hs_err_pid*
+
+# 4. Archivos específicos del Sistema Operativo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 5. Configuraciones Locales y Secretos
+local.properties
+*.jks
+*.keystore
+# (Opcional) Archivos de entorno si en el futuro usamos variables.env locales
+.env
+.env.local
+deploy/k8s/base/secrets.yaml
+deploy/local/tls/
+
+# 6. Protobuf / gRPC (Código autogenerado)
+# Aseguramos que el código generado por protobuf no se suba al repositorio,
+# ya que se generará dinámicamente en cada compilación.
+**/generated/source/proto/

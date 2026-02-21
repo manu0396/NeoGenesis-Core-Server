@@ -1,0 +1,48 @@
+name: Deploy Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Container image tag"
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup Argo Rollouts CLI
+        run: |
+          curl -sLO https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64
+          chmod +x kubectl-argo-rollouts-linux-amd64
+          sudo mv kubectl-argo-rollouts-linux-amd64 /usr/local/bin/kubectl-argo-rollouts
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
+
+      - name: Apply canary manifests
+        run: |
+          kubectl apply -f deploy/k8s/base/deployment.yaml
+          kubectl apply -f deploy/k8s/canary/analysis-templates.yaml
+          kubectl apply -f deploy/k8s/canary/rollout.yaml
+
+      - name: Set image and watch rollout
+        id: rollout
+        run: |
+          kubectl argo rollouts set image neogenesis-core neogenesis-core=ghcr.io/neogenesis/core-server:${{ github.event.inputs.image_tag }}
+          kubectl argo rollouts promote neogenesis-core
+          kubectl argo rollouts get rollout neogenesis-core --watch --timeout 20m
+
+      - name: Auto rollback on failure
+        if: failure()
+        run: |
+          kubectl argo rollouts abort neogenesis-core
+          kubectl argo rollouts get rollout neogenesis-core

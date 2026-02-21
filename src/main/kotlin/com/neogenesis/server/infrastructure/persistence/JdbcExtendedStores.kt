@@ -1,0 +1,700 @@
+﻿package com.neogenesis.server.infrastructure.persistence
+
+import com.neogenesis.server.application.port.LatencyBreachStore
+import com.neogenesis.server.application.port.OutboxEventStore
+import com.neogenesis.server.application.port.PrintSessionStore
+import com.neogenesis.server.application.port.RetinalPlanStore
+import com.neogenesis.server.domain.model.DeadLetterOutboxEvent
+import com.neogenesis.server.domain.model.LatencyBreachEvent
+import com.neogenesis.server.domain.model.OutboxEventStatus
+import com.neogenesis.server.domain.model.PrintSession
+import com.neogenesis.server.domain.model.PrintSessionStatus
+import com.neogenesis.server.domain.model.RetinalControlConstraints
+import com.neogenesis.server.domain.model.RetinalLayerSpec
+import com.neogenesis.server.domain.model.RetinalPrintPlan
+import com.neogenesis.server.domain.model.ServerlessOutboxEvent
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.sql.ResultSet
+import java.sql.Timestamp
+import java.time.Instant
+import javax.sql.DataSource
+
+private val extendedJson = Json { ignoreUnknownKeys = true }
+
+class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStore {
+    override fun save(plan: RetinalPrintPlan) {
+        dataSource.connection.use { connection ->
+            val updated = connection.prepareStatement(
+                """
+                UPDATE retinal_print_plans
+                SET
+                    patient_id = ?,
+                    source_document_id = ?,
+                    blueprint_version = ?,
+                    layers_json = ?,
+                    constraints_json = ?,
+                    created_at = ?
+                WHERE plan_id = ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, plan.patientId)
+                statement.setString(2, plan.sourceDocumentId)
+                statement.setString(3, plan.blueprintVersion)
+                statement.setString(4, encodeLayers(plan.layers))
+                statement.setString(5, encodeConstraints(plan.constraints))
+                statement.setTimestamp(6, Timestamp.from(Instant.ofEpochMilli(plan.createdAtMs)))
+                statement.setString(7, plan.planId)
+                statement.executeUpdate()
+            }
+
+            if (updated == 0) {
+                connection.prepareStatement(
+                    """
+                    INSERT INTO retinal_print_plans(
+                        plan_id,
+                        patient_id,
+                        source_document_id,
+                        blueprint_version,
+                        layers_json,
+                        constraints_json,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, plan.planId)
+                    statement.setString(2, plan.patientId)
+                    statement.setString(3, plan.sourceDocumentId)
+                    statement.setString(4, plan.blueprintVersion)
+                    statement.setString(5, encodeLayers(plan.layers))
+                    statement.setString(6, encodeConstraints(plan.constraints))
+                    statement.setTimestamp(7, Timestamp.from(Instant.ofEpochMilli(plan.createdAtMs)))
+                    statement.executeUpdate()
+                }
+            }
+        }
+    }
+
+    override fun findByPlanId(planId: String): RetinalPrintPlan? {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    plan_id,
+                    patient_id,
+                    source_document_id,
+                    blueprint_version,
+                    layers_json,
+                    constraints_json,
+                    created_at
+                FROM retinal_print_plans
+                WHERE plan_id = ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, planId)
+                statement.executeQuery().use { rs ->
+                    if (rs.next()) rs.toRetinalPlan() else null
+                }
+            }
+        }
+    }
+
+    override fun findLatestByPatientId(patientId: String): RetinalPrintPlan? {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    plan_id,
+                    patient_id,
+                    source_document_id,
+                    blueprint_version,
+                    layers_json,
+                    constraints_json,
+                    created_at
+                FROM retinal_print_plans
+                WHERE patient_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, patientId)
+                statement.executeQuery().use { rs ->
+                    if (rs.next()) rs.toRetinalPlan() else null
+                }
+            }
+        }
+    }
+
+    override fun findRecent(limit: Int): List<RetinalPrintPlan> {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    plan_id,
+                    patient_id,
+                    source_document_id,
+                    blueprint_version,
+                    layers_json,
+                    constraints_json,
+                    created_at
+                FROM retinal_print_plans
+                ORDER BY created_at DESC
+                LIMIT ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setInt(1, limit)
+                statement.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(rs.toRetinalPlan())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionStore {
+    override fun create(session: PrintSession) {
+        dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                INSERT INTO print_sessions(
+                    session_id,
+                    printer_id,
+                    plan_id,
+                    patient_id,
+                    status,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, session.sessionId)
+                statement.setString(2, session.printerId)
+                statement.setString(3, session.planId)
+                statement.setString(4, session.patientId)
+                statement.setString(5, session.status.name)
+                statement.setTimestamp(6, Timestamp.from(Instant.ofEpochMilli(session.createdAtMs)))
+                statement.setTimestamp(7, Timestamp.from(Instant.ofEpochMilli(session.updatedAtMs)))
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    override fun updateStatus(sessionId: String, status: PrintSessionStatus, updatedAtMs: Long) {
+        dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                UPDATE print_sessions
+                SET
+                    status = ?,
+                    updated_at = ?
+                WHERE session_id = ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, status.name)
+                statement.setTimestamp(2, Timestamp.from(Instant.ofEpochMilli(updatedAtMs)))
+                statement.setString(3, sessionId)
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    override fun findBySessionId(sessionId: String): PrintSession? {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    session_id,
+                    printer_id,
+                    plan_id,
+                    patient_id,
+                    status,
+                    created_at,
+                    updated_at
+                FROM print_sessions
+                WHERE session_id = ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, sessionId)
+                statement.executeQuery().use { rs ->
+                    if (rs.next()) rs.toPrintSession() else null
+                }
+            }
+        }
+    }
+
+    override fun findActiveByPrinterId(printerId: String): PrintSession? {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    session_id,
+                    printer_id,
+                    plan_id,
+                    patient_id,
+                    status,
+                    created_at,
+                    updated_at
+                FROM print_sessions
+                WHERE printer_id = ?
+                  AND status = 'ACTIVE'
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, printerId)
+                statement.executeQuery().use { rs ->
+                    if (rs.next()) rs.toPrintSession() else null
+                }
+            }
+        }
+    }
+
+    override fun findActive(limit: Int): List<PrintSession> {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    session_id,
+                    printer_id,
+                    plan_id,
+                    patient_id,
+                    status,
+                    created_at,
+                    updated_at
+                FROM print_sessions
+                WHERE status = 'ACTIVE'
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setInt(1, limit)
+                statement.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(rs.toPrintSession())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+class JdbcLatencyBreachStore(private val dataSource: DataSource) : LatencyBreachStore {
+    override fun append(event: LatencyBreachEvent) {
+        dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                INSERT INTO latency_budget_breaches(
+                    printer_id,
+                    source,
+                    duration_ms,
+                    threshold_ms,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, event.printerId)
+                statement.setString(2, event.source)
+                statement.setDouble(3, event.durationMs)
+                statement.setLong(4, event.thresholdMs)
+                statement.setTimestamp(5, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    override fun recent(limit: Int): List<LatencyBreachEvent> {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    printer_id,
+                    source,
+                    duration_ms,
+                    threshold_ms,
+                    created_at
+                FROM latency_budget_breaches
+                ORDER BY created_at DESC
+                LIMIT ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setInt(1, limit)
+                statement.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(
+                                LatencyBreachEvent(
+                                    printerId = rs.getString("printer_id"),
+                                    source = rs.getString("source"),
+                                    durationMs = rs.getDouble("duration_ms"),
+                                    thresholdMs = rs.getLong("threshold_ms"),
+                                    createdAtMs = rs.getTimestamp("created_at").time
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStore {
+    override fun enqueue(eventType: String, partitionKey: String, payloadJson: String) {
+        dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                INSERT INTO integration_outbox(
+                    event_type,
+                    partition_key,
+                    payload_json,
+                    status,
+                    attempts,
+                    next_attempt_at,
+                    last_error,
+                    created_at,
+                    processed_at
+                ) VALUES (?, ?, ?, 'PENDING', 0, ?, ?, ?, ?)
+                """.trimIndent()
+            ).use { statement ->
+                val now = Timestamp.from(Instant.now())
+                statement.setString(1, eventType)
+                statement.setString(2, partitionKey)
+                statement.setString(3, payloadJson)
+                statement.setTimestamp(4, now)
+                statement.setString(5, null)
+                statement.setTimestamp(6, now)
+                statement.setTimestamp(7, null)
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    override fun pending(limit: Int): List<ServerlessOutboxEvent> {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    id,
+                    event_type,
+                    partition_key,
+                    payload_json,
+                    status,
+                    attempts,
+                    next_attempt_at,
+                    last_error,
+                    created_at,
+                    processed_at
+                FROM integration_outbox
+                WHERE status = 'PENDING'
+                  AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
+                ORDER BY id ASC
+                LIMIT ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setInt(1, limit)
+                statement.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(rs.toOutboxEvent())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun markProcessed(eventId: Long) {
+        dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                UPDATE integration_outbox
+                SET
+                    status = 'PROCESSED',
+                    attempts = attempts + 1,
+                    processed_at = ?,
+                    next_attempt_at = NULL,
+                    last_error = NULL
+                WHERE id = ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setTimestamp(1, Timestamp.from(Instant.now()))
+                statement.setLong(2, eventId)
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    override fun scheduleRetry(eventId: Long, nextAttemptAtMs: Long, failureReason: String) {
+        dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                UPDATE integration_outbox
+                SET
+                    status = 'PENDING',
+                    attempts = attempts + 1,
+                    next_attempt_at = ?,
+                    last_error = ?,
+                    processed_at = NULL
+                WHERE id = ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setTimestamp(1, Timestamp.from(Instant.ofEpochMilli(nextAttemptAtMs)))
+                statement.setString(2, failureReason.take(2048))
+                statement.setLong(3, eventId)
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    override fun moveToDeadLetter(eventId: Long, failureReason: String) {
+        dataSource.connection.use { connection ->
+            val now = Timestamp.from(Instant.now())
+
+            connection.prepareStatement(
+                """
+                INSERT INTO integration_outbox_dead_letter(
+                    source_outbox_id,
+                    event_type,
+                    partition_key,
+                    payload_json,
+                    attempts,
+                    failure_reason,
+                    created_at,
+                    failed_at
+                )
+                SELECT
+                    id,
+                    event_type,
+                    partition_key,
+                    payload_json,
+                    attempts + 1,
+                    ?,
+                    created_at,
+                    ?
+                FROM integration_outbox
+                WHERE id = ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, failureReason.take(2048))
+                statement.setTimestamp(2, now)
+                statement.setLong(3, eventId)
+                statement.executeUpdate()
+            }
+
+            connection.prepareStatement(
+                """
+                UPDATE integration_outbox
+                SET
+                    status = 'FAILED',
+                    attempts = attempts + 1,
+                    processed_at = ?,
+                    next_attempt_at = NULL,
+                    last_error = ?
+                WHERE id = ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setTimestamp(1, now)
+                statement.setString(2, failureReason.take(2048))
+                statement.setLong(3, eventId)
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    override fun deadLetter(limit: Int): List<DeadLetterOutboxEvent> {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                SELECT
+                    id,
+                    source_outbox_id,
+                    event_type,
+                    partition_key,
+                    payload_json,
+                    attempts,
+                    failure_reason,
+                    created_at,
+                    failed_at
+                FROM integration_outbox_dead_letter
+                ORDER BY failed_at DESC
+                LIMIT ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setInt(1, limit)
+                statement.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(rs.toDeadLetterEvent())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun replayDeadLetter(deadLetterId: Long): Boolean {
+        return dataSource.connection.use { connection ->
+            connection.autoCommit = false
+            try {
+                val moved = connection.prepareStatement(
+                    """
+                    INSERT INTO integration_outbox(
+                        event_type,
+                        partition_key,
+                        payload_json,
+                        status,
+                        attempts,
+                        next_attempt_at,
+                        last_error,
+                        created_at,
+                        processed_at
+                    )
+                    SELECT
+                        event_type,
+                        partition_key,
+                        payload_json,
+                        'PENDING',
+                        0,
+                        CURRENT_TIMESTAMP,
+                        NULL,
+                        CURRENT_TIMESTAMP,
+                        NULL
+                    FROM integration_outbox_dead_letter
+                    WHERE id = ?
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setLong(1, deadLetterId)
+                    statement.executeUpdate()
+                }
+                if (moved == 0) {
+                    connection.rollback()
+                    return false
+                }
+
+                connection.prepareStatement(
+                    """
+                    DELETE FROM integration_outbox_dead_letter
+                    WHERE id = ?
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setLong(1, deadLetterId)
+                    statement.executeUpdate()
+                }
+                connection.commit()
+                true
+            } catch (_: Exception) {
+                connection.rollback()
+                false
+            } finally {
+                connection.autoCommit = true
+            }
+        }
+    }
+}
+
+private fun ResultSet.toRetinalPlan(): RetinalPrintPlan {
+    return RetinalPrintPlan(
+        planId = getString("plan_id"),
+        patientId = getString("patient_id"),
+        sourceDocumentId = getString("source_document_id"),
+        blueprintVersion = getString("blueprint_version"),
+        layers = decodeLayers(getString("layers_json")),
+        constraints = decodeConstraints(getString("constraints_json")),
+        createdAtMs = getTimestamp("created_at").time
+    )
+}
+
+private fun ResultSet.toPrintSession(): PrintSession {
+    return PrintSession(
+        sessionId = getString("session_id"),
+        printerId = getString("printer_id"),
+        planId = getString("plan_id"),
+        patientId = getString("patient_id"),
+        status = PrintSessionStatus.valueOf(getString("status")),
+        createdAtMs = getTimestamp("created_at").time,
+        updatedAtMs = getTimestamp("updated_at").time
+    )
+}
+
+private fun ResultSet.toOutboxEvent(): ServerlessOutboxEvent {
+    val processedAt = getTimestamp("processed_at")
+    val nextAttemptAt = getTimestamp("next_attempt_at")
+    return ServerlessOutboxEvent(
+        id = getLong("id"),
+        eventType = getString("event_type"),
+        partitionKey = getString("partition_key"),
+        payloadJson = getString("payload_json"),
+        status = OutboxEventStatus.valueOf(getString("status")),
+        attempts = getInt("attempts"),
+        createdAtMs = getTimestamp("created_at").time,
+        processedAtMs = processedAt?.time,
+        nextAttemptAtMs = nextAttemptAt?.time,
+        lastError = getString("last_error")
+    )
+}
+
+private fun ResultSet.toDeadLetterEvent(): DeadLetterOutboxEvent {
+    return DeadLetterOutboxEvent(
+        id = getLong("id"),
+        sourceOutboxId = getLong("source_outbox_id"),
+        eventType = getString("event_type"),
+        partitionKey = getString("partition_key"),
+        payloadJson = getString("payload_json"),
+        attempts = getInt("attempts"),
+        failureReason = getString("failure_reason"),
+        createdAtMs = getTimestamp("created_at").time,
+        failedAtMs = getTimestamp("failed_at").time
+    )
+}
+
+private fun encodeLayers(value: List<RetinalLayerSpec>): String {
+    return extendedJson.encodeToString(ListSerializer(RetinalLayerSpec.serializer()), value)
+}
+
+private fun decodeLayers(value: String?): List<RetinalLayerSpec> {
+    if (value.isNullOrBlank()) {
+        return emptyList()
+    }
+    return runCatching {
+        extendedJson.decodeFromString(ListSerializer(RetinalLayerSpec.serializer()), value)
+    }.getOrElse {
+        emptyList()
+    }
+}
+
+private fun encodeConstraints(value: RetinalControlConstraints): String {
+    return extendedJson.encodeToString(RetinalControlConstraints.serializer(), value)
+}
+
+private fun decodeConstraints(value: String?): RetinalControlConstraints {
+    if (value.isNullOrBlank()) {
+        return defaultConstraints()
+    }
+    return runCatching {
+        extendedJson.decodeFromString(RetinalControlConstraints.serializer(), value)
+    }.getOrElse {
+        defaultConstraints()
+    }
+}
+
+private fun defaultConstraints(): RetinalControlConstraints {
+    return RetinalControlConstraints(
+        targetNozzleTempCelsius = 36.8f,
+        tempToleranceCelsius = 0.8f,
+        targetPressureKPa = 108.0f,
+        pressureToleranceKPa = 8.0f,
+        minCellViability = 0.9f,
+        maxMorphologicalDefectProbability = 0.12f,
+        maxNirIiTempCelsius = 38.5f,
+        targetBioInkPh = 7.35f,
+        phTolerance = 0.12f
+    )
+}

@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: neogenesis-latency-analysis
+spec:
+  metrics:
+    - name: telemetry-p99-latency
+      interval: 1m
+      successCondition: result[0] < 0.05
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            histogram_quantile(0.99, sum(rate(neogenesis_telemetry_processing_latency_seconds_bucket[5m])) by (le))
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: neogenesis-error-rate-analysis
+spec:
+  metrics:
+    - name: outbox-dlq-rate
+      interval: 1m
+      successCondition: result[0] == 0
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            rate(neogenesis_outbox_dead_letter_total[5m])
