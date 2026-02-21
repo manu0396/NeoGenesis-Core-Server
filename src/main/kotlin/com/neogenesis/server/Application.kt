@@ -1,4 +1,4 @@
-﻿package com.neogenesis.server
+package com.neogenesis.server
 
 import com.neogenesis.server.application.AuditTrailService
 import com.neogenesis.server.application.ControlDecisionService
