@@ -48,6 +48,7 @@ permissions:
 jobs:
   release-readiness:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       GRYPE_DB_CACHE_DIR: .grype/db
       BASE_URL: ${{ inputs.base_url }}
@@ -64,6 +65,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Prepare evidence folders
+        id: prepare_evidence
         run: |
           set -euo pipefail
           TS="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -72,12 +74,28 @@ jobs:
           echo "EVIDENCE_ROOT=$ROOT" >> "$GITHUB_ENV"
           echo "ts=$TS" >> "$GITHUB_OUTPUT"
 
+      - name: Validate production evidence scope
+        id: production_scope
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.target_environment }}" = "production" ]; then
+            if [ "${{ inputs.run_k8s_checks }}" != "true" ] || [ "${{ inputs.run_backup_restore }}" != "true" ] || [ "${{ inputs.run_alerting_checks }}" != "true" ]; then
+              echo "For production readiness, run_k8s_checks/run_backup_restore/run_alerting_checks must all be true." | tee "${EVIDENCE_ROOT}/summary/preflight-scope-error.txt"
+              exit 1
+            fi
+          fi
+          echo "scope_validation=ok" | tee "${EVIDENCE_ROOT}/summary/preflight-scope.txt"
+
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
+
+      - name: Setup kubectl
+        if: ${{ inputs.run_k8s_checks }}
+        uses: azure/setup-kubectl@v4
 
       - name: Compute Grype cache key
         id: grype-cache-key
@@ -92,12 +110,14 @@ jobs:
             grype-db-${{ runner.os }}-
 
       - name: Build and run quality gates
+        id: build_checks
         run: |
           set -euo pipefail
           chmod +x gradlew
           ./gradlew clean check | tee "${EVIDENCE_ROOT}/tests/gradle-clean-check.txt"
 
       - name: Build shadow artifact for security scanning
+        id: build_shadow
         run: |
           set -euo pipefail
           ./gradlew shadowJar | tee "${EVIDENCE_ROOT}/tests/gradle-shadowjar.txt"
@@ -149,6 +169,7 @@ jobs:
           cache-db: true
 
       - name: Evaluate security gate (fixable HIGH/CRITICAL)
+        id: security_gate
         run: |
           set -euo pipefail
           cp sbom.spdx.json "${EVIDENCE_ROOT}/security/sbom.spdx.json"
@@ -180,6 +201,7 @@ jobs:
           fi
 
       - name: HTTP health probes
+        id: health_probes
         run: |
           set -euo pipefail
           curl -fsS "${BASE_URL}/health/live" | tee "${EVIDENCE_ROOT}/ops/health-live.json"
@@ -188,6 +210,7 @@ jobs:
           jq -e '.checks.database_reachable == true and .checks.traceability_loaded == true' "${EVIDENCE_ROOT}/ops/health-ready.json" >/dev/null
 
       - name: Metrics endpoint snapshot
+        id: metrics_snapshot
         run: |
           set -euo pipefail
           if [ -n "${READINESS_JWT}" ]; then
@@ -197,6 +220,7 @@ jobs:
           fi
 
       - name: Correlation ID check
+        id: correlation_check
         run: |
           set -euo pipefail
           CID="rr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -204,6 +228,7 @@ jobs:
           grep -qi "X-Correlation-Id: ${CID}" "${EVIDENCE_ROOT}/observability/correlation-header-check.txt"
 
       - name: Kubernetes checks
+        id: k8s_checks
         if: ${{ inputs.run_k8s_checks }}
         run: |
           set -euo pipefail
@@ -219,6 +244,7 @@ jobs:
           kubectl rollout status deployment/neogenesis-core -n "${K8S_NAMESPACE}" --timeout=120s | tee "${EVIDENCE_ROOT}/ops/k8s-rollout-status.txt"
 
       - name: TLS certificate checks
+        id: tls_checks
         if: ${{ inputs.run_k8s_checks }}
         run: |
           set -euo pipefail
@@ -235,6 +261,7 @@ jobs:
           fi
 
       - name: Backup/restore drill
+        id: backup_restore
         if: ${{ inputs.run_backup_restore }}
         run: |
           set -euo pipefail
@@ -258,6 +285,7 @@ jobs:
           sha256sum "${DUMP_FILE}" | tee "${EVIDENCE_ROOT}/data/backup-sha256.txt"
 
       - name: Alertmanager status checks
+        id: alerting_checks
         if: ${{ inputs.run_alerting_checks }}
         run: |
           set -euo pipefail
@@ -273,9 +301,21 @@ jobs:
           jq -e '.cluster.status != null' "${EVIDENCE_ROOT}/observability/alertmanager-status.json" >/dev/null
 
       - name: Build readiness summary
+        if: ${{ always() }}
         run: |
           set -euo pipefail
           SUMMARY="${EVIDENCE_ROOT}/summary/release-readiness-summary.md"
+
+          build_status="${{ steps.build_checks.outcome }}"
+          security_status="${{ steps.security_gate.outcome }}"
+          health_status="${{ steps.health_probes.outcome }}"
+          metrics_status="${{ steps.metrics_snapshot.outcome }}"
+          correlation_status="${{ steps.correlation_check.outcome }}"
+          k8s_status="${{ steps.k8s_checks.outcome }}"
+          tls_status="${{ steps.tls_checks.outcome }}"
+          backup_status="${{ steps.backup_restore.outcome }}"
+          alerting_status="${{ steps.alerting_checks.outcome }}"
+
           {
             echo "# Release Readiness Summary"
             echo ""
@@ -286,19 +326,24 @@ jobs:
             echo "- Run URL: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
             echo ""
             echo "## Mandatory checks"
-            echo "- Build + check: PASS"
-            echo "- Security gate (fixable HIGH/CRITICAL): PASS"
-            echo "- Health readiness: PASS"
+            echo "- Scope validation: \`${{ steps.production_scope.outcome }}\`"
+            echo "- Build + check: \`${build_status}\`"
+            echo "- Security gate (fixable HIGH/CRITICAL): \`${security_status}\`"
+            echo "- Health readiness: \`${health_status}\`"
+            echo "- Metrics snapshot: \`${metrics_status}\`"
+            echo "- Correlation header: \`${correlation_status}\`"
             echo ""
             echo "## Optional checks executed"
-            echo "- Kubernetes checks: \`${{ inputs.run_k8s_checks }}\`"
-            echo "- Backup/restore drill: \`${{ inputs.run_backup_restore }}\`"
-            echo "- Alerting checks: \`${{ inputs.run_alerting_checks }}\`"
+            echo "- Kubernetes checks requested: \`${{ inputs.run_k8s_checks }}\` / outcome: \`${k8s_status:-skipped}\`"
+            echo "- TLS checks requested: \`${{ inputs.run_k8s_checks }}\` / outcome: \`${tls_status:-skipped}\`"
+            echo "- Backup/restore drill requested: \`${{ inputs.run_backup_restore }}\` / outcome: \`${backup_status:-skipped}\`"
+            echo "- Alerting checks requested: \`${{ inputs.run_alerting_checks }}\` / outcome: \`${alerting_status:-skipped}\`"
             echo ""
             echo "Reference checklist: \`docs/production-go-no-go-checklist.md\`"
           } | tee "$SUMMARY"
 
       - name: Upload evidence pack
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: release-readiness-evidence-${{ github.run_id }}

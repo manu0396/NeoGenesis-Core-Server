@@ -6,6 +6,19 @@ on:
       image_tag:
         description: "Container image tag"
         required: true
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: "neogenesis"
+      rollout_name:
+        description: "Argo Rollout name"
+        required: true
+        default: "neogenesis-core"
+      run_rollback_drill:
+        description: "Run rollback drill (abort canary) instead of full promotion"
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   deploy:
@@ -13,6 +26,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Prepare evidence folders
+        run: |
+          set -euo pipefail
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          ROOT="evidence/canary-${TS}-${{ github.ref_name }}"
+          mkdir -p "$ROOT"/{rollout,rollback,summary}
+          echo "EVIDENCE_ROOT=$ROOT" >> "$GITHUB_ENV"
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
@@ -33,16 +54,60 @@ jobs:
           kubectl apply -f deploy/k8s/base/deployment.yaml
           kubectl apply -f deploy/k8s/canary/analysis-templates.yaml
           kubectl apply -f deploy/k8s/canary/rollout.yaml
+          kubectl argo rollouts list -n "${{ github.event.inputs.namespace }}" > "${EVIDENCE_ROOT}/rollout/rollouts-before.txt"
 
-      - name: Set image and watch rollout
+      - name: Set image and execute rollout flow
         id: rollout
         run: |
-          kubectl argo rollouts set image neogenesis-core neogenesis-core=ghcr.io/neogenesis/core-server:${{ github.event.inputs.image_tag }}
-          kubectl argo rollouts promote neogenesis-core
-          kubectl argo rollouts get rollout neogenesis-core --watch --timeout 20m
+          set -euo pipefail
+          ROLLOUT="${{ github.event.inputs.rollout_name }}"
+          NS="${{ github.event.inputs.namespace }}"
+          IMAGE="ghcr.io/neogenesis/core-server:${{ github.event.inputs.image_tag }}"
+
+          kubectl argo rollouts set image "$ROLLOUT" neogenesis-core="$IMAGE" -n "$NS" | tee "${EVIDENCE_ROOT}/rollout/set-image.txt"
+
+          if [ "${{ github.event.inputs.run_rollback_drill }}" = "true" ]; then
+            kubectl argo rollouts get rollout "$ROLLOUT" -n "$NS" --watch --timeout 5m | tee "${EVIDENCE_ROOT}/rollback/watch-before-abort.txt"
+            kubectl argo rollouts abort "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollback/abort.txt"
+            kubectl argo rollouts get rollout "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollback/status-after-abort.txt"
+            echo "flow=rollback_drill" >> "$GITHUB_OUTPUT"
+          else
+            kubectl argo rollouts promote "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollout/promote.txt"
+            kubectl argo rollouts get rollout "$ROLLOUT" -n "$NS" --watch --timeout 20m | tee "${EVIDENCE_ROOT}/rollout/watch-promoted.txt"
+            echo "flow=promoted" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Auto rollback on failure
         if: failure()
         run: |
-          kubectl argo rollouts abort neogenesis-core
-          kubectl argo rollouts get rollout neogenesis-core
+          set -euo pipefail
+          ROLLOUT="${{ github.event.inputs.rollout_name }}"
+          NS="${{ github.event.inputs.namespace }}"
+          kubectl argo rollouts abort "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollback/auto-abort.txt"
+          kubectl argo rollouts get rollout "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollback/auto-abort-status.txt"
+
+      - name: Build rollout summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          SUMMARY="${EVIDENCE_ROOT}/summary/deploy-canary-summary.md"
+          {
+            echo "# Deploy Canary Summary"
+            echo ""
+            echo "- Branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Namespace: \`${{ github.event.inputs.namespace }}\`"
+            echo "- Rollout: \`${{ github.event.inputs.rollout_name }}\`"
+            echo "- Image tag: \`${{ github.event.inputs.image_tag }}\`"
+            echo "- Flow: \`${{ steps.rollout.outputs.flow || 'failed_before_flow' }}\`"
+            echo "- Rollback drill requested: \`${{ github.event.inputs.run_rollback_drill }}\`"
+            echo "- Run URL: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
+          } | tee "$SUMMARY"
+
+      - name: Upload rollout evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-rollout-evidence-${{ github.run_id }}
+          path: ${{ env.EVIDENCE_ROOT }}
+          if-no-files-found: error

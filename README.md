@@ -91,6 +91,7 @@ Reference files:
 - `deploy/k8s/base/secrets.example.yaml`
 - `deploy/runbooks/production-readiness.md`
 - `docs/production-go-no-go-checklist.md`
+- `docs/production-evidence-runbook.md`
 
 ## Container Build
 
