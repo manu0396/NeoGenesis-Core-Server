@@ -1,5 +1,6 @@
 package com.neogenesis.server.application.clinical
 
+import com.neogenesis.server.application.error.DependencyUnavailableException
 import com.neogenesis.server.domain.model.ClinicalDocument
 import com.neogenesis.server.application.resilience.IntegrationResilienceExecutor
 import com.neogenesis.server.infrastructure.clinical.DicomWebClient
@@ -13,7 +14,8 @@ class ClinicalPacsService(
 ) {
 
     fun importLatestStudy(patientId: String, actor: String): ClinicalDocument? {
-        val client = requireNotNull(dicomWebClient) { "PACS/DICOMweb integration is not enabled" }
+        val client = dicomWebClient
+            ?: throw DependencyUnavailableException("pacs_integration_disabled", "PACS/DICOMweb integration is not enabled")
         return resilienceExecutor.execute("dicomweb", "importLatestStudy") {
             runCatching {
                 val latest = client.fetchLatestStudyMetadata(patientId) ?: return@runCatching null
@@ -33,7 +35,8 @@ class ClinicalPacsService(
     }
 
     fun queryStudies(patientId: String, limit: Int): String {
-        val client = requireNotNull(dicomWebClient) { "PACS/DICOMweb integration is not enabled" }
+        val client = dicomWebClient
+            ?: throw DependencyUnavailableException("pacs_integration_disabled", "PACS/DICOMweb integration is not enabled")
         return resilienceExecutor.execute("dicomweb", "queryStudies") {
             runCatching {
                 client.queryStudies(patientId = patientId, limit = limit).also {

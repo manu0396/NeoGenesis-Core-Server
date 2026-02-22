@@ -29,6 +29,7 @@ class ServerlessDispatchService(
     private val outboxEventPublisher: OutboxEventPublisher,
     private val retryPolicy: OutboxRetryPolicy
 ) {
+    private val claimTtlMs = 5 * 60 * 1000L
 
     fun enqueue(eventType: String, partitionKey: String, payloadJson: String) {
         outboxEventStore.enqueue(eventType, partitionKey, payloadJson)
@@ -53,7 +54,7 @@ class ServerlessDispatchService(
     }
 
     fun drainPending(limit: Int): Int {
-        val events = outboxEventStore.pending(limit)
+        val events = outboxEventStore.claimPending(limit = limit, processingTtlMs = claimTtlMs)
         if (events.isEmpty()) {
             return 0
         }

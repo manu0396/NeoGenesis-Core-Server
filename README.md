@@ -90,6 +90,21 @@ Reference files:
 - `deploy/k8s/base/deployment.yaml`
 - `deploy/k8s/base/secrets.example.yaml`
 - `deploy/runbooks/production-readiness.md`
+- `docs/production-go-no-go-checklist.md`
+
+## Container Build
+
+Build production image:
+
+```bash
+docker build -t neogenesis-core-server:1.0.0 .
+```
+
+Run local container:
+
+```bash
+docker run --rm -p 8080:8080 -p 50051:50051 neogenesis-core-server:1.0.0
+```
 
 ## CI / Quality Gates
 

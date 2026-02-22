@@ -1,0 +1,11 @@
+.git
+.github
+.gradle
+.idea
+.kotlin
+build
+out
+perf/hil
+*.iml
+*.log
+*.tmp

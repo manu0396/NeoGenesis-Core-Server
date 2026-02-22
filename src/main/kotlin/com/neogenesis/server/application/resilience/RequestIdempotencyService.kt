@@ -1,5 +1,6 @@
 package com.neogenesis.server.application.resilience
 
+import com.neogenesis.server.application.error.ConflictException
 import com.neogenesis.server.application.port.IdempotencyRememberResult
 import com.neogenesis.server.application.port.RequestIdempotencyStore
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
@@ -30,7 +31,10 @@ class RequestIdempotencyService(
             }
             IdempotencyRememberResult.DUPLICATE_MISMATCH -> {
                 metricsService.recordIdempotencyDuplicate(operation, "mismatch")
-                error("Idempotency key already used with different payload")
+                throw ConflictException(
+                    code = "idempotency_key_payload_mismatch",
+                    message = "Idempotency key already used with different payload"
+                )
             }
         }
     }

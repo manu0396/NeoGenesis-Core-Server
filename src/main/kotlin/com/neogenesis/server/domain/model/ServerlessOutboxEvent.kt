@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class OutboxEventStatus {
     PENDING,
+    PROCESSING,
     PROCESSED,
     FAILED
 }
@@ -18,6 +19,7 @@ data class ServerlessOutboxEvent(
     val status: OutboxEventStatus,
     val attempts: Int,
     val createdAtMs: Long,
+    val processingStartedAtMs: Long?,
     val processedAtMs: Long?,
     val nextAttemptAtMs: Long?,
     val lastError: String?

@@ -69,6 +69,7 @@ interface LatencyBreachStore {
 interface OutboxEventStore {
     fun enqueue(eventType: String, partitionKey: String, payloadJson: String)
     fun pending(limit: Int = 100): List<ServerlessOutboxEvent>
+    fun claimPending(limit: Int = 100, processingTtlMs: Long = 300_000L): List<ServerlessOutboxEvent>
     fun markProcessed(eventId: Long)
     fun scheduleRetry(eventId: Long, nextAttemptAtMs: Long, failureReason: String)
     fun moveToDeadLetter(eventId: Long, failureReason: String)
