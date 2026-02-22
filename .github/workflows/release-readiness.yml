@@ -1,6 +1,41 @@
 name: Release Readiness
 
 on:
+  workflow_call:
+    inputs:
+      target_environment:
+        description: "Environment under validation"
+        required: true
+        type: string
+      base_url:
+        description: "Base URL (example: https://stage.neogenesis.example)"
+        required: true
+        type: string
+      metrics_path:
+        description: "Metrics path"
+        required: false
+        default: /metrics
+        type: string
+      k8s_namespace:
+        description: "Kubernetes namespace"
+        required: false
+        default: neogenesis
+        type: string
+      run_k8s_checks:
+        description: "Run Kubernetes and certificate checks"
+        required: false
+        default: false
+        type: boolean
+      run_backup_restore:
+        description: "Run PostgreSQL backup/restore drill"
+        required: false
+        default: false
+        type: boolean
+      run_alerting_checks:
+        description: "Run Alertmanager status checks"
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       target_environment:

@@ -1,6 +1,22 @@
 name: Performance HIL Validation
 
 on:
+  workflow_call:
+    inputs:
+      base_url:
+        description: "Server base URL"
+        required: true
+        type: string
+      metrics_threshold_p95_ms:
+        description: "Fail if p95 exceeds this threshold (ms)"
+        required: false
+        default: "50"
+        type: string
+      metrics_threshold_p99_ms:
+        description: "Fail if p99 exceeds this threshold (ms)"
+        required: false
+        default: "75"
+        type: string
   workflow_dispatch:
     inputs:
       base_url:
@@ -29,10 +45,10 @@ jobs:
       - name: Run k6 latency benchmark
         id: k6
         env:
-          BASE_URL: ${{ github.event.inputs.base_url }}
+          BASE_URL: ${{ inputs.base_url }}
           JWT: ${{ secrets.NEOGENESIS_PERF_JWT }}
-          K6_THRESHOLD_P95_MS: ${{ github.event.inputs.metrics_threshold_p95_ms }}
-          K6_THRESHOLD_P99_MS: ${{ github.event.inputs.metrics_threshold_p99_ms }}
+          K6_THRESHOLD_P95_MS: ${{ inputs.metrics_threshold_p95_ms }}
+          K6_THRESHOLD_P99_MS: ${{ inputs.metrics_threshold_p99_ms }}
         run: |
           set -euo pipefail
           k6 run --summary-export k6-summary.json perf/k6/telemetry-latency.js
@@ -52,15 +68,15 @@ jobs:
           echo "p95_ms=$P95_MS" >> "$GITHUB_OUTPUT"
           echo "p99_ms=$P99_MS" >> "$GITHUB_OUTPUT"
 
-          THRESHOLD_P95="${{ github.event.inputs.metrics_threshold_p95_ms }}"
-          THRESHOLD_P99="${{ github.event.inputs.metrics_threshold_p99_ms }}"
+          THRESHOLD_P95="${{ inputs.metrics_threshold_p95_ms }}"
+          THRESHOLD_P99="${{ inputs.metrics_threshold_p99_ms }}"
           PASS_P95="$(awk "BEGIN {print ($P95_MS <= $THRESHOLD_P95) ? \"true\" : \"false\"}")"
           PASS_P99="$(awk "BEGIN {print ($P99_MS <= $THRESHOLD_P99) ? \"true\" : \"false\"}")"
 
           {
             echo "# Performance HIL Summary"
             echo ""
-            echo "- Base URL: \`${{ github.event.inputs.base_url }}\`"
+            echo "- Base URL: \`${{ inputs.base_url }}\`"
             echo "- p95 latency (ms): \`${P95_MS}\` (threshold \`${THRESHOLD_P95}\`, pass=\`${PASS_P95}\`)"
             echo "- p99 latency (ms): \`${P99_MS}\` (threshold \`${THRESHOLD_P99}\`, pass=\`${PASS_P99}\`)"
             echo "- Run URL: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"

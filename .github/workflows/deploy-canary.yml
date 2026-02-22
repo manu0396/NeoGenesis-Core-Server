@@ -1,6 +1,27 @@
 name: Deploy Canary
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Container image tag"
+        required: true
+        type: string
+      namespace:
+        description: "Kubernetes namespace"
+        required: false
+        default: "neogenesis"
+        type: string
+      rollout_name:
+        description: "Argo Rollout name"
+        required: false
+        default: "neogenesis-core"
+        type: string
+      run_rollback_drill:
+        description: "Run rollback drill (abort canary) instead of full promotion"
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       image_tag:
@@ -54,19 +75,19 @@ jobs:
           kubectl apply -f deploy/k8s/base/deployment.yaml
           kubectl apply -f deploy/k8s/canary/analysis-templates.yaml
           kubectl apply -f deploy/k8s/canary/rollout.yaml
-          kubectl argo rollouts list -n "${{ github.event.inputs.namespace }}" > "${EVIDENCE_ROOT}/rollout/rollouts-before.txt"
+          kubectl argo rollouts list -n "${{ inputs.namespace }}" > "${EVIDENCE_ROOT}/rollout/rollouts-before.txt"
 
       - name: Set image and execute rollout flow
         id: rollout
         run: |
           set -euo pipefail
-          ROLLOUT="${{ github.event.inputs.rollout_name }}"
-          NS="${{ github.event.inputs.namespace }}"
-          IMAGE="ghcr.io/neogenesis/core-server:${{ github.event.inputs.image_tag }}"
+          ROLLOUT="${{ inputs.rollout_name }}"
+          NS="${{ inputs.namespace }}"
+          IMAGE="ghcr.io/neogenesis/core-server:${{ inputs.image_tag }}"
 
           kubectl argo rollouts set image "$ROLLOUT" neogenesis-core="$IMAGE" -n "$NS" | tee "${EVIDENCE_ROOT}/rollout/set-image.txt"
 
-          if [ "${{ github.event.inputs.run_rollback_drill }}" = "true" ]; then
+          if [ "${{ inputs.run_rollback_drill }}" = "true" ]; then
             kubectl argo rollouts get rollout "$ROLLOUT" -n "$NS" --watch --timeout 5m | tee "${EVIDENCE_ROOT}/rollback/watch-before-abort.txt"
             kubectl argo rollouts abort "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollback/abort.txt"
             kubectl argo rollouts get rollout "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollback/status-after-abort.txt"
@@ -81,8 +102,8 @@ jobs:
         if: failure()
         run: |
           set -euo pipefail
-          ROLLOUT="${{ github.event.inputs.rollout_name }}"
-          NS="${{ github.event.inputs.namespace }}"
+          ROLLOUT="${{ inputs.rollout_name }}"
+          NS="${{ inputs.namespace }}"
           kubectl argo rollouts abort "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollback/auto-abort.txt"
           kubectl argo rollouts get rollout "$ROLLOUT" -n "$NS" | tee "${EVIDENCE_ROOT}/rollback/auto-abort-status.txt"
 
@@ -96,11 +117,11 @@ jobs:
             echo ""
             echo "- Branch: \`${GITHUB_REF_NAME}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Namespace: \`${{ github.event.inputs.namespace }}\`"
-            echo "- Rollout: \`${{ github.event.inputs.rollout_name }}\`"
-            echo "- Image tag: \`${{ github.event.inputs.image_tag }}\`"
+            echo "- Namespace: \`${{ inputs.namespace }}\`"
+            echo "- Rollout: \`${{ inputs.rollout_name }}\`"
+            echo "- Image tag: \`${{ inputs.image_tag }}\`"
             echo "- Flow: \`${{ steps.rollout.outputs.flow || 'failed_before_flow' }}\`"
-            echo "- Rollback drill requested: \`${{ github.event.inputs.run_rollback_drill }}\`"
+            echo "- Rollback drill requested: \`${{ inputs.run_rollback_drill }}\`"
             echo "- Run URL: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
           } | tee "$SUMMARY"
 

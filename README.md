@@ -112,6 +112,7 @@ docker run --rm -p 8080:8080 -p 50051:50051 neogenesis-core-server:1.0.0
 - `./gradlew test`
 - `./gradlew traceabilityGate`
 - `./gradlew check`
+- `.github/workflows/production-evidence-suite.yml` (orquesta release-readiness + perf-hil + rollback drill)
 
 The traceability gate validates requirement-to-evidence consistency and blocks releases when coverage is incomplete.
 

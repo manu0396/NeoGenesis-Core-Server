@@ -1,0 +1,78 @@
+name: Production Evidence Suite
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Production base URL (example: https://api.neogenesis.example)"
+        required: true
+        type: string
+      metrics_path:
+        description: "Metrics path"
+        required: true
+        default: /metrics
+        type: string
+      k8s_namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: neogenesis
+        type: string
+      image_tag:
+        description: "Container image tag for canary rollback drill"
+        required: true
+        default: "1.0.0"
+        type: string
+      perf_threshold_p95_ms:
+        description: "Perf gate p95 threshold (ms)"
+        required: true
+        default: "50"
+        type: string
+      perf_threshold_p99_ms:
+        description: "Perf gate p99 threshold (ms)"
+        required: true
+        default: "75"
+        type: string
+      rollout_name:
+        description: "Argo Rollout resource name"
+        required: true
+        default: "neogenesis-core"
+        type: string
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  release_readiness_production:
+    name: Release Readiness (Production)
+    uses: ./.github/workflows/release-readiness.yml
+    with:
+      target_environment: production
+      base_url: ${{ inputs.base_url }}
+      metrics_path: ${{ inputs.metrics_path }}
+      k8s_namespace: ${{ inputs.k8s_namespace }}
+      run_k8s_checks: true
+      run_backup_restore: true
+      run_alerting_checks: true
+    secrets: inherit
+
+  perf_hil_production:
+    name: Perf HIL (Production)
+    needs: release_readiness_production
+    uses: ./.github/workflows/perf-hil.yml
+    with:
+      base_url: ${{ inputs.base_url }}
+      metrics_threshold_p95_ms: ${{ inputs.perf_threshold_p95_ms }}
+      metrics_threshold_p99_ms: ${{ inputs.perf_threshold_p99_ms }}
+    secrets: inherit
+
+  canary_rollback_drill:
+    name: Canary Rollback Drill (Production)
+    needs: perf_hil_production
+    uses: ./.github/workflows/deploy-canary.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      namespace: ${{ inputs.k8s_namespace }}
+      rollout_name: ${{ inputs.rollout_name }}
+      run_rollback_drill: true
+    secrets: inherit
