@@ -2,16 +2,22 @@ name: Supply Chain Security
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [ "main", "master" ]
   push:
     branches: [ "main", "master" ]
 
 permissions:
   contents: read
   id-token: write
+  security-events: write
+  issues: write
 
 jobs:
   sbom-cve-sign:
     runs-on: ubuntu-latest
+    env:
+      GRYPE_DB_CACHE_DIR: .grype/db
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,24 +29,162 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Compute Grype cache key
+        id: grype-cache-key
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Grype DB
+        uses: actions/cache@v4
+        with:
+          path: .grype/db
+          key: grype-db-${{ runner.os }}-${{ steps.grype-cache-key.outputs.week }}
+          restore-keys: |
+            grype-db-${{ runner.os }}-
+
       - name: Build artifacts
         run: |
           chmod +x gradlew
           ./gradlew clean build
 
-      - name: Generate SBOM (SPDX)
+      - name: Resolve runtime dependencies (inventory)
+        run: ./gradlew dependencies --configuration runtimeClasspath > build/runtime-dependencies.txt
+
+      - name: Locate deployable artifact
+        id: artifact
+        run: |
+          JAR_PATH="$(ls build/libs/*-all.jar | head -n 1)"
+          if [ -z "$JAR_PATH" ]; then
+            echo "No shadow JAR found in build/libs"
+            exit 1
+          fi
+          echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Generate SBOM (SPDX JSON)
         uses: anchore/sbom-action@v0
         with:
           format: spdx-json
           output-file: sbom.spdx.json
-          path: .
+          file: ${{ steps.artifact.outputs.jar_path }}
 
-      - name: Scan CVEs
+      - name: Grype report (SARIF)
         uses: anchore/scan-action@v6
         with:
-          path: .
-          fail-build: true
-          severity-cutoff: high
+          sbom: sbom.spdx.json
+          fail-build: false
+          output-format: sarif
+          output-file: grype.sarif
+          severity-cutoff: low
+          cache-db: true
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: grype.sarif
+
+      - name: Grype report (JSON)
+        uses: anchore/scan-action@v6
+        with:
+          sbom: sbom.spdx.json
+          fail-build: false
+          output-format: json
+          output-file: grype.json
+          severity-cutoff: low
+          cache-db: true
+
+      - name: Apply security gate (fixable vulnerabilities only)
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            gate_mode="critical"
+            gate_filter='(.vulnerability.severity | ascii_downcase) == "critical"'
+          else
+            gate_mode="high_or_critical"
+            gate_filter='(.vulnerability.severity | ascii_downcase) == "critical" or (.vulnerability.severity | ascii_downcase) == "high"'
+          fi
+
+          jq -r "
+            [.matches[]
+              | select((.vulnerability.fix.state // \"\") == \"fixed\")
+              | select($gate_filter)
+              | {
+                  id: .vulnerability.id,
+                  severity: .vulnerability.severity,
+                  package: .artifact.name,
+                  version: .artifact.version,
+                  fix: ((.vulnerability.fix.versions // []) | join(\",\"))
+                }
+            ]
+            | unique_by(.id, .package, .version)
+          " grype.json > build/grype-fixable-gate.json
+
+          jq -r "
+            [.matches[]
+              | select((.vulnerability.fix.state // \"\") != \"fixed\")
+              | select((.vulnerability.severity | ascii_downcase) == \"critical\" or (.vulnerability.severity | ascii_downcase) == \"high\")
+              | {
+                  id: .vulnerability.id,
+                  severity: .vulnerability.severity,
+                  package: .artifact.name,
+                  version: .artifact.version,
+                  fix_state: (.vulnerability.fix.state // \"unknown\")
+                }
+            ]
+            | unique_by(.id, .package, .version)
+          " grype.json > build/grype-non-fixable-high-critical.json
+
+          gate_count="$(jq 'length' build/grype-fixable-gate.json)"
+          non_fixable_count="$(jq 'length' build/grype-non-fixable-high-critical.json)"
+
+          echo "gate_mode=$gate_mode" >> "$GITHUB_OUTPUT"
+          echo "gate_count=$gate_count" >> "$GITHUB_OUTPUT"
+          echo "non_fixable_count=$non_fixable_count" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Supply-chain gate result"
+            echo "- Gate mode: \`$gate_mode\`"
+            echo "- Fixable findings in gate scope: \`$gate_count\`"
+            echo "- HIGH/CRITICAL without fix available: \`$non_fixable_count\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$gate_count" -gt 0 ]; then
+            echo ""
+            echo "Fixable vulnerabilities violating policy:"
+            jq -r '.[] | "- \(.id) [\(.severity)] \(.package)@\(.version) -> \(.fix)"' build/grype-fixable-gate.json
+            exit 1
+          fi
+
+      - name: Open tracking issue for non-fixable HIGH/CRITICAL
+        if: >
+          steps.gate.outputs.non_fixable_count != '0' &&
+          github.event_name == 'push' &&
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const findings = JSON.parse(fs.readFileSync('build/grype-non-fixable-high-critical.json', 'utf8'));
+            const lines = findings.map(f => `- ${f.id} [${f.severity}] ${f.package}@${f.version} (fix_state=${f.fix_state})`);
+            const body = [
+              'Automated tracking for HIGH/CRITICAL vulnerabilities without fix available.',
+              '',
+              `Detected on run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              ...lines,
+              '',
+              'Action required:',
+              '1. Validate exploitability in deployment context.',
+              '2. Document mitigation and temporary exception in SECURITY.md.',
+              '3. Define review/expiry date for each exception.'
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Security tracking: non-fixable HIGH/CRITICAL (${new Date().toISOString().slice(0,10)})`,
+              body
+            });
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.7.0
@@ -58,6 +202,11 @@ jobs:
           name: supply-chain-artifacts
           path: |
             sbom.spdx.json
+            grype.sarif
+            grype.json
+            build/runtime-dependencies.txt
+            build/grype-fixable-gate.json
+            build/grype-non-fixable-high-critical.json
             build/libs/*.jar
             build/libs/*.jar.sig
             build/libs/*.jar.pem

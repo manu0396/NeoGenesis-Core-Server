@@ -1,0 +1,11 @@
+# NeoGenesis Grype baseline policy.
+# Gate behavior in CI is enforced in .github/workflows/supply-chain.yml:
+# - PRs: block only CRITICAL with fix available
+# - main/master: block HIGH/CRITICAL with fix available
+# This file keeps local/CLI defaults conservative.
+fail-on: high
+add-cpes-if-none: true
+
+# No active suppressions.
+# Any temporary exception must include CVE, reason, owner and expiry in SECURITY.md.
+ignore: []
