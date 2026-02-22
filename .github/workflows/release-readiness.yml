@@ -1,0 +1,306 @@
+name: Release Readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Environment under validation"
+        required: true
+        type: choice
+        options:
+          - stage
+          - production
+        default: stage
+      base_url:
+        description: "Base URL (example: https://stage.neogenesis.example)"
+        required: true
+        type: string
+      metrics_path:
+        description: "Metrics path"
+        required: true
+        default: /metrics
+        type: string
+      k8s_namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: neogenesis
+        type: string
+      run_k8s_checks:
+        description: "Run Kubernetes and certificate checks"
+        required: true
+        default: false
+        type: boolean
+      run_backup_restore:
+        description: "Run PostgreSQL backup/restore drill"
+        required: true
+        default: false
+        type: boolean
+      run_alerting_checks:
+        description: "Run Alertmanager status checks"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  release-readiness:
+    runs-on: ubuntu-latest
+    env:
+      GRYPE_DB_CACHE_DIR: .grype/db
+      BASE_URL: ${{ inputs.base_url }}
+      METRICS_PATH: ${{ inputs.metrics_path }}
+      K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
+      READINESS_JWT: ${{ secrets.RELEASE_READINESS_JWT }}
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+      READINESS_DB_URL: ${{ secrets.READINESS_DB_URL }}
+      READINESS_DB_ADMIN_URL: ${{ secrets.READINESS_DB_ADMIN_URL }}
+      ALERTMANAGER_URL: ${{ secrets.ALERTMANAGER_URL }}
+      ALERTMANAGER_AUTH_HEADER: ${{ secrets.ALERTMANAGER_AUTH_HEADER }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare evidence folders
+        run: |
+          set -euo pipefail
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          ROOT="evidence/${TS}-${{ github.ref_name }}-${{ inputs.target_environment }}"
+          mkdir -p "$ROOT"/{security,ops,data,observability,tests,summary}
+          echo "EVIDENCE_ROOT=$ROOT" >> "$GITHUB_ENV"
+          echo "ts=$TS" >> "$GITHUB_OUTPUT"
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Compute Grype cache key
+        id: grype-cache-key
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Grype DB
+        uses: actions/cache@v4
+        with:
+          path: .grype/db
+          key: grype-db-${{ runner.os }}-${{ steps.grype-cache-key.outputs.week }}
+          restore-keys: |
+            grype-db-${{ runner.os }}-
+
+      - name: Build and run quality gates
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew clean check | tee "${EVIDENCE_ROOT}/tests/gradle-clean-check.txt"
+
+      - name: Build shadow artifact for security scanning
+        run: |
+          set -euo pipefail
+          ./gradlew shadowJar | tee "${EVIDENCE_ROOT}/tests/gradle-shadowjar.txt"
+          ls -la build/libs | tee "${EVIDENCE_ROOT}/tests/build-libs.txt"
+
+      - name: Locate deployable artifact
+        id: artifact
+        run: |
+          set -euo pipefail
+          JAR_PATH="$(ls build/libs/*-all.jar | head -n 1)"
+          if [ -z "$JAR_PATH" ]; then
+            echo "No shadow JAR found in build/libs" | tee "${EVIDENCE_ROOT}/security/jar-locate-error.txt"
+            exit 1
+          fi
+          echo "jar_path=$JAR_PATH" >> "$GITHUB_OUTPUT"
+          echo "$JAR_PATH" | tee "${EVIDENCE_ROOT}/security/jar-path.txt"
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: sbom.spdx.json
+          file: ${{ steps.artifact.outputs.jar_path }}
+          upload-artifact: "false"
+
+      - name: Grype report (SARIF)
+        uses: anchore/scan-action@v6
+        with:
+          sbom: sbom.spdx.json
+          fail-build: false
+          output-format: sarif
+          output-file: grype.sarif
+          severity-cutoff: low
+          cache-db: true
+
+      - name: Upload SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: grype.sarif
+
+      - name: Grype report (JSON)
+        uses: anchore/scan-action@v6
+        with:
+          sbom: sbom.spdx.json
+          fail-build: false
+          output-format: json
+          output-file: grype.json
+          severity-cutoff: low
+          cache-db: true
+
+      - name: Evaluate security gate (fixable HIGH/CRITICAL)
+        run: |
+          set -euo pipefail
+          cp sbom.spdx.json "${EVIDENCE_ROOT}/security/sbom.spdx.json"
+          cp grype.sarif "${EVIDENCE_ROOT}/security/grype.sarif"
+          cp grype.json "${EVIDENCE_ROOT}/security/grype.json"
+
+          jq -r '
+            [.matches[]
+              | select((.vulnerability.fix.state // "") == "fixed")
+              | select((.vulnerability.severity | ascii_downcase) == "high" or (.vulnerability.severity | ascii_downcase) == "critical")
+              | {
+                  id: .vulnerability.id,
+                  severity: .vulnerability.severity,
+                  package: .artifact.name,
+                  version: .artifact.version,
+                  fix: ((.vulnerability.fix.versions // []) | join(","))
+                }
+            ]
+            | unique_by(.id, .package, .version)
+          ' grype.json > "${EVIDENCE_ROOT}/security/grype-fixable-high-critical.json"
+
+          FIXABLE_COUNT="$(jq 'length' "${EVIDENCE_ROOT}/security/grype-fixable-high-critical.json")"
+          echo "fixable_high_critical=$FIXABLE_COUNT" | tee "${EVIDENCE_ROOT}/security/security-gate-summary.txt"
+
+          if [ "$FIXABLE_COUNT" -gt 0 ]; then
+            echo "Security gate failed: fixable HIGH/CRITICAL findings detected." | tee -a "${EVIDENCE_ROOT}/security/security-gate-summary.txt"
+            jq -r '.[] | "- \(.id) [\(.severity)] \(.package)@\(.version) -> \(.fix)"' "${EVIDENCE_ROOT}/security/grype-fixable-high-critical.json" | tee -a "${EVIDENCE_ROOT}/security/security-gate-summary.txt"
+            exit 1
+          fi
+
+      - name: HTTP health probes
+        run: |
+          set -euo pipefail
+          curl -fsS "${BASE_URL}/health/live" | tee "${EVIDENCE_ROOT}/ops/health-live.json"
+          curl -fsS "${BASE_URL}/health/ready" | tee "${EVIDENCE_ROOT}/ops/health-ready.json"
+          jq -e '.status == "ready"' "${EVIDENCE_ROOT}/ops/health-ready.json" >/dev/null
+          jq -e '.checks.database_reachable == true and .checks.traceability_loaded == true' "${EVIDENCE_ROOT}/ops/health-ready.json" >/dev/null
+
+      - name: Metrics endpoint snapshot
+        run: |
+          set -euo pipefail
+          if [ -n "${READINESS_JWT}" ]; then
+            curl -fsS -H "Authorization: Bearer ${READINESS_JWT}" "${BASE_URL}${METRICS_PATH}" | tee "${EVIDENCE_ROOT}/observability/metrics-snapshot.txt" >/dev/null
+          else
+            echo "RELEASE_READINESS_JWT not configured. Metrics check skipped." | tee "${EVIDENCE_ROOT}/observability/metrics-snapshot.txt"
+          fi
+
+      - name: Correlation ID check
+        run: |
+          set -euo pipefail
+          CID="rr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          curl -i -fsS -H "X-Correlation-Id: ${CID}" "${BASE_URL}/health" | tee "${EVIDENCE_ROOT}/observability/correlation-header-check.txt" >/dev/null
+          grep -qi "X-Correlation-Id: ${CID}" "${EVIDENCE_ROOT}/observability/correlation-header-check.txt"
+
+      - name: Kubernetes checks
+        if: ${{ inputs.run_k8s_checks }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KUBECONFIG_B64}" ]; then
+            echo "KUBECONFIG_B64 is required when run_k8s_checks=true" | tee "${EVIDENCE_ROOT}/ops/k8s-checks.txt"
+            exit 1
+          fi
+          mkdir -p ~/.kube
+          echo "${KUBECONFIG_B64}" | base64 -d > ~/.kube/config
+          kubectl get ns "${K8S_NAMESPACE}" | tee "${EVIDENCE_ROOT}/ops/k8s-namespace.txt"
+          kubectl get deploy -n "${K8S_NAMESPACE}" | tee "${EVIDENCE_ROOT}/ops/k8s-deployments.txt"
+          kubectl get pods -n "${K8S_NAMESPACE}" -o wide | tee "${EVIDENCE_ROOT}/ops/k8s-pods.txt"
+          kubectl rollout status deployment/neogenesis-core -n "${K8S_NAMESPACE}" --timeout=120s | tee "${EVIDENCE_ROOT}/ops/k8s-rollout-status.txt"
+
+      - name: TLS certificate checks
+        if: ${{ inputs.run_k8s_checks }}
+        run: |
+          set -euo pipefail
+          kubectl get secret neogenesis-grpc-tls -n "${K8S_NAMESPACE}" -o jsonpath='{.data.tls\.crt}' | base64 -d > "${EVIDENCE_ROOT}/security/grpc-tls.crt"
+          openssl x509 -in "${EVIDENCE_ROOT}/security/grpc-tls.crt" -noout -subject -issuer -dates | tee "${EVIDENCE_ROOT}/security/grpc-cert-details.txt"
+
+          if echo "${BASE_URL}" | grep -q '^https://'; then
+            HOSTPORT="$(echo "${BASE_URL}" | sed -E 's#^https://([^/]+).*$#\1#')"
+            HOST="$(echo "${HOSTPORT}" | cut -d: -f1)"
+            PORT="$(echo "${HOSTPORT}" | grep -q ':' && echo "${HOSTPORT}" | cut -d: -f2 || echo 443)"
+            echo | openssl s_client -servername "${HOST}" -connect "${HOST}:${PORT}" 2>/dev/null | openssl x509 -noout -subject -issuer -dates | tee "${EVIDENCE_ROOT}/security/http-cert-details.txt"
+          else
+            echo "BASE_URL is not https. HTTP cert check skipped." | tee "${EVIDENCE_ROOT}/security/http-cert-details.txt"
+          fi
+
+      - name: Backup/restore drill
+        if: ${{ inputs.run_backup_restore }}
+        run: |
+          set -euo pipefail
+          if [ -z "${READINESS_DB_URL}" ] || [ -z "${READINESS_DB_ADMIN_URL}" ]; then
+            echo "READINESS_DB_URL and READINESS_DB_ADMIN_URL are required when run_backup_restore=true" | tee "${EVIDENCE_ROOT}/data/backup-restore.txt"
+            exit 1
+          fi
+
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+          DUMP_FILE="${EVIDENCE_ROOT}/data/neogenesis.dump"
+          TEMP_DB="neogenesis_restore_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          RESTORE_URL="$(echo "${READINESS_DB_ADMIN_URL}" | sed -E "s#/[a-zA-Z0-9_\\-]+(\\?.*)?\$#/${TEMP_DB}#")"
+
+          pg_dump --format=custom --file "${DUMP_FILE}" "${READINESS_DB_URL}"
+          psql "${READINESS_DB_ADMIN_URL}" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${TEMP_DB}\";"
+          pg_restore --no-owner --no-privileges --dbname "${RESTORE_URL}" "${DUMP_FILE}"
+          psql "${RESTORE_URL}" -v ON_ERROR_STOP=1 -c "SELECT count(*) AS flyway_rows FROM flyway_schema_history;" | tee "${EVIDENCE_ROOT}/data/restore-validation.txt"
+          psql "${READINESS_DB_ADMIN_URL}" -v ON_ERROR_STOP=1 -c "DROP DATABASE \"${TEMP_DB}\";"
+          sha256sum "${DUMP_FILE}" | tee "${EVIDENCE_ROOT}/data/backup-sha256.txt"
+
+      - name: Alertmanager status checks
+        if: ${{ inputs.run_alerting_checks }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ALERTMANAGER_URL}" ]; then
+            echo "ALERTMANAGER_URL is required when run_alerting_checks=true" | tee "${EVIDENCE_ROOT}/observability/alertmanager-status.json"
+            exit 1
+          fi
+          if [ -n "${ALERTMANAGER_AUTH_HEADER}" ]; then
+            curl -fsS -H "${ALERTMANAGER_AUTH_HEADER}" "${ALERTMANAGER_URL%/}/api/v2/status" | tee "${EVIDENCE_ROOT}/observability/alertmanager-status.json"
+          else
+            curl -fsS "${ALERTMANAGER_URL%/}/api/v2/status" | tee "${EVIDENCE_ROOT}/observability/alertmanager-status.json"
+          fi
+          jq -e '.cluster.status != null' "${EVIDENCE_ROOT}/observability/alertmanager-status.json" >/dev/null
+
+      - name: Build readiness summary
+        run: |
+          set -euo pipefail
+          SUMMARY="${EVIDENCE_ROOT}/summary/release-readiness-summary.md"
+          {
+            echo "# Release Readiness Summary"
+            echo ""
+            echo "- Environment: \`${{ inputs.target_environment }}\`"
+            echo "- Base URL: \`${BASE_URL}\`"
+            echo "- Branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Run URL: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
+            echo ""
+            echo "## Mandatory checks"
+            echo "- Build + check: PASS"
+            echo "- Security gate (fixable HIGH/CRITICAL): PASS"
+            echo "- Health readiness: PASS"
+            echo ""
+            echo "## Optional checks executed"
+            echo "- Kubernetes checks: \`${{ inputs.run_k8s_checks }}\`"
+            echo "- Backup/restore drill: \`${{ inputs.run_backup_restore }}\`"
+            echo "- Alerting checks: \`${{ inputs.run_alerting_checks }}\`"
+            echo ""
+            echo "Reference checklist: \`docs/production-go-no-go-checklist.md\`"
+          } | tee "$SUMMARY"
+
+      - name: Upload evidence pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-readiness-evidence-${{ github.run_id }}
+          path: ${{ env.EVIDENCE_ROOT }}
+          if-no-files-found: error
