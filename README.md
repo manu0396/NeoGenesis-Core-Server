@@ -57,6 +57,9 @@ This server is designed to support:
 
 ## Quick Start (Local)
 
+Prerequisites:
+- JDK 21
+
 1. Build and run checks:
 
 ```bash

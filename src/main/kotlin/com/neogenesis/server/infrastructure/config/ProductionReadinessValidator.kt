@@ -3,13 +3,13 @@ package com.neogenesis.server.infrastructure.config
 import java.io.File
 
 object ProductionReadinessValidator {
-    private const val DEFAULT_JWT_SECRET = "replace-this-secret-before-production"
+    private const val DEFAULT_JWT_SECRET = "dev-only-secret-change-me"
 
     fun validate(
         config: AppConfig,
         resolvedJwtSecret: String?,
         resolvedPhiKey: String?,
-        resolvedPiiKey: String?
+        resolvedPiiKey: String?,
     ) {
         val violations = mutableListOf<String>()
 
@@ -80,14 +80,34 @@ object ProductionReadinessValidator {
             }
         }
 
+        if (config.billing.enabled && config.billing.provider.equals("stripe", ignoreCase = true)) {
+            val stripe = config.billing.stripe
+            if (stripe.secretKey.isNullOrBlank()) {
+                violations += "Billing enabled with Stripe requires STRIPE_SECRET_KEY."
+            }
+            if (stripe.webhookSecret.isNullOrBlank()) {
+                violations += "Billing enabled with Stripe requires STRIPE_WEBHOOK_SECRET."
+            }
+            if (stripe.priceIdPro.isNullOrBlank()) {
+                violations += "Billing enabled with Stripe requires STRIPE_PRICE_ID_PRO."
+            }
+            if (stripe.successUrl.isBlank() || stripe.cancelUrl.isBlank()) {
+                violations += "Billing enabled with Stripe requires success/cancel URLs."
+            }
+        }
+
         if (violations.isNotEmpty()) {
             throw IllegalStateException(
-                "Production readiness checks failed: ${violations.joinToString("; ")}"
+                "Production readiness checks failed: ${violations.joinToString("; ")}",
             )
         }
     }
 
-    private fun validateFile(label: String, path: String?, violations: MutableList<String>) {
+    private fun validateFile(
+        label: String,
+        path: String?,
+        violations: MutableList<String>,
+    ) {
         if (path.isNullOrBlank()) {
             return
         }

@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class ConsentStatus {
     GRANTED,
-    REVOKED
+    REVOKED,
 }
 
 @Serializable
@@ -16,5 +16,5 @@ data class GdprConsentRecord(
     val status: ConsentStatus,
     val legalBasis: String,
     val grantedBy: String,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = System.currentTimeMillis(),
 )

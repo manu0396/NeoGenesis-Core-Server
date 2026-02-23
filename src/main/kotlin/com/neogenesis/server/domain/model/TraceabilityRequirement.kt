@@ -8,5 +8,5 @@ data class TraceabilityRequirement(
     val isoClause: String,
     val title: String,
     val linkedOperations: List<String>,
-    val verification: String
+    val verification: String,
 )

@@ -19,11 +19,14 @@ class ClinicalIntegrationService(
     private val metricsService: OperationalMetricsService,
     private val serverlessDispatchService: ServerlessDispatchService,
     private val validationService: ClinicalValidationService,
-    private val gdprService: GdprService
+    private val gdprService: GdprService,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun ingestFhir(rawJson: String, actor: String): ClinicalDocument {
+    fun ingestFhir(
+        rawJson: String,
+        actor: String,
+    ): ClinicalDocument {
         validationService.requireValidFhir(rawJson)
         val parsed = json.parseToJsonElement(rawJson).jsonObject
         val resourceType = parsed["resourceType"]?.jsonPrimitive?.content.orEmpty()
@@ -33,17 +36,19 @@ class ClinicalIntegrationService(
                 ?: parsed["patient"]?.jsonObject?.get("reference")?.jsonPrimitive?.content
         requireConsent(patientReference, "CLINICAL_PROCESSING")
 
-        val document = ClinicalDocument(
-            documentType = ClinicalDocumentType.FHIR,
-            externalId = externalId,
-            patientId = patientReference,
-            content = rawJson,
-            metadata = mapOf(
-                "resourceType" to resourceType.ifBlank { "Unknown" },
-                "dataClassification" to "PHI",
-                "processingPurpose" to "CLINICAL_PROCESSING"
+        val document =
+            ClinicalDocument(
+                documentType = ClinicalDocumentType.FHIR,
+                externalId = externalId,
+                patientId = patientReference,
+                content = rawJson,
+                metadata =
+                    mapOf(
+                        "resourceType" to resourceType.ifBlank { "Unknown" },
+                        "dataClassification" to "PHI",
+                        "processingPurpose" to "CLINICAL_PROCESSING",
+                    ),
             )
-        )
 
         persistAndAudit(document, actor, "clinical.ingest.fhir")
         metricsService.recordClinicalDocument("FHIR")
@@ -51,7 +56,10 @@ class ClinicalIntegrationService(
         return document
     }
 
-    fun ingestHl7(rawMessage: String, actor: String): ClinicalDocument {
+    fun ingestHl7(
+        rawMessage: String,
+        actor: String,
+    ): ClinicalDocument {
         validationService.requireValidHl7(rawMessage)
         val lines = rawMessage.split('\n', '\r').filter { it.isNotBlank() }
         val msh = lines.firstOrNull { it.startsWith("MSH|") }?.split('|').orEmpty()
@@ -62,17 +70,19 @@ class ClinicalIntegrationService(
         val patientId = pid.getOrNull(3)
         requireConsent(patientId, "CLINICAL_PROCESSING")
 
-        val document = ClinicalDocument(
-            documentType = ClinicalDocumentType.HL7,
-            externalId = externalId,
-            patientId = patientId,
-            content = rawMessage,
-            metadata = mapOf(
-                "messageType" to messageType.ifBlank { "Unknown" },
-                "dataClassification" to "PHI",
-                "processingPurpose" to "CLINICAL_PROCESSING"
+        val document =
+            ClinicalDocument(
+                documentType = ClinicalDocumentType.HL7,
+                externalId = externalId,
+                patientId = patientId,
+                content = rawMessage,
+                metadata =
+                    mapOf(
+                        "messageType" to messageType.ifBlank { "Unknown" },
+                        "dataClassification" to "PHI",
+                        "processingPurpose" to "CLINICAL_PROCESSING",
+                    ),
             )
-        )
 
         persistAndAudit(document, actor, "clinical.ingest.hl7")
         metricsService.recordClinicalDocument("HL7")
@@ -80,24 +90,29 @@ class ClinicalIntegrationService(
         return document
     }
 
-    fun ingestDicomMetadata(rawJson: String, actor: String): ClinicalDocument {
+    fun ingestDicomMetadata(
+        rawJson: String,
+        actor: String,
+    ): ClinicalDocument {
         val parsed = json.parseToJsonElement(rawJson).jsonObject
         val sopInstanceUid = parsed["sopInstanceUid"]?.jsonPrimitive?.content
         val patientId = parsed["patientId"]?.jsonPrimitive?.content
         val modality = parsed["modality"]?.jsonPrimitive?.content.orEmpty()
         requireConsent(patientId, "CLINICAL_PROCESSING")
 
-        val document = ClinicalDocument(
-            documentType = ClinicalDocumentType.DICOM,
-            externalId = sopInstanceUid,
-            patientId = patientId,
-            content = rawJson,
-            metadata = mapOf(
-                "modality" to modality.ifBlank { "Unknown" },
-                "dataClassification" to "PHI",
-                "processingPurpose" to "CLINICAL_PROCESSING"
+        val document =
+            ClinicalDocument(
+                documentType = ClinicalDocumentType.DICOM,
+                externalId = sopInstanceUid,
+                patientId = patientId,
+                content = rawJson,
+                metadata =
+                    mapOf(
+                        "modality" to modality.ifBlank { "Unknown" },
+                        "dataClassification" to "PHI",
+                        "processingPurpose" to "CLINICAL_PROCESSING",
+                    ),
             )
-        )
 
         persistAndAudit(document, actor, "clinical.ingest.dicom")
         metricsService.recordClinicalDocument("DICOM")
@@ -109,21 +124,23 @@ class ClinicalIntegrationService(
         patientId: String,
         studyInstanceUid: String,
         metadataJson: String,
-        actor: String
+        actor: String,
     ): ClinicalDocument {
         requireConsent(patientId, "CLINICAL_PROCESSING")
-        val document = ClinicalDocument(
-            documentType = ClinicalDocumentType.DICOM,
-            externalId = studyInstanceUid,
-            patientId = patientId,
-            content = metadataJson,
-            metadata = mapOf(
-                "source" to "DICOMWEB",
-                "studyInstanceUid" to studyInstanceUid,
-                "dataClassification" to "PHI",
-                "processingPurpose" to "CLINICAL_PROCESSING"
+        val document =
+            ClinicalDocument(
+                documentType = ClinicalDocumentType.DICOM,
+                externalId = studyInstanceUid,
+                patientId = patientId,
+                content = metadataJson,
+                metadata =
+                    mapOf(
+                        "source" to "DICOMWEB",
+                        "studyInstanceUid" to studyInstanceUid,
+                        "dataClassification" to "PHI",
+                        "processingPurpose" to "CLINICAL_PROCESSING",
+                    ),
             )
-        )
         persistAndAudit(document, actor, "clinical.ingest.dicomweb")
         metricsService.recordClinicalDocument("DICOMWEB")
         dispatch("DICOMWEB_INGESTED", document)
@@ -132,10 +149,16 @@ class ClinicalIntegrationService(
 
     fun recent(limit: Int = 100): List<ClinicalDocument> = clinicalDocumentStore.recent(limit)
 
-    fun findByPatientId(patientId: String, limit: Int = 100): List<ClinicalDocument> =
-        clinicalDocumentStore.findByPatientId(patientId, limit)
+    fun findByPatientId(
+        patientId: String,
+        limit: Int = 100,
+    ): List<ClinicalDocument> = clinicalDocumentStore.findByPatientId(patientId, limit)
 
-    private fun persistAndAudit(document: ClinicalDocument, actor: String, action: String) {
+    private fun persistAndAudit(
+        document: ClinicalDocument,
+        actor: String,
+        action: String,
+    ) {
         clinicalDocumentStore.append(document)
         auditTrailService.record(
             AuditEvent(
@@ -145,21 +168,27 @@ class ClinicalIntegrationService(
                 resourceId = document.externalId,
                 outcome = "success",
                 requirementIds = listOf("REQ-ISO-005"),
-                details = mapOf("documentType" to document.documentType.name)
-            )
+                details = mapOf("documentType" to document.documentType.name),
+            ),
         )
     }
 
-    private fun dispatch(eventType: String, document: ClinicalDocument) {
+    private fun dispatch(
+        eventType: String,
+        document: ClinicalDocument,
+    ) {
         val payload = json.encodeToString(document)
         serverlessDispatchService.enqueue(
             eventType = eventType,
             partitionKey = document.patientId ?: document.externalId ?: "unknown",
-            payloadJson = payload
+            payloadJson = payload,
         )
     }
 
-    private fun requireConsent(patientId: String?, purpose: String) {
+    private fun requireConsent(
+        patientId: String?,
+        purpose: String,
+    ) {
         if (patientId.isNullOrBlank()) {
             if (!gdprService.hasActiveConsent("UNKNOWN", purpose)) {
                 error("GDPR consent check failed: patient reference is required")

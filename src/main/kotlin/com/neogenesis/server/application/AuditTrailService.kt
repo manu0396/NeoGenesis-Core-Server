@@ -7,7 +7,7 @@ import com.neogenesis.server.infrastructure.observability.OperationalMetricsServ
 
 class AuditTrailService(
     private val auditEventStore: AuditEventStore,
-    private val metricsService: OperationalMetricsService
+    private val metricsService: OperationalMetricsService,
 ) {
     fun record(event: AuditEvent) {
         auditEventStore.append(event)

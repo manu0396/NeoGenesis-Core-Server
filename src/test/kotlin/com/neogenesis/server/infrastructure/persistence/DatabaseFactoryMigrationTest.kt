@@ -6,7 +6,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class DatabaseFactoryMigrationTest {
-
     @Test
     fun `applies flyway migrations on clean database`() {
         val jdbcUrl = "jdbc:h2:mem:neogenesis-migrate-clean-${System.nanoTime()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"
@@ -30,13 +29,14 @@ class DatabaseFactoryMigrationTest {
     fun `re-running initialization on migrated schema is idempotent`() {
         val jdbcUrl = "jdbc:h2:mem:neogenesis-migrate-reapply-${System.nanoTime()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"
         val firstDataSource = createDataSource(jdbcUrl)
-        val firstFlywayRows = try {
-            flywayRows(firstDataSource)
-        } finally {
-            if (firstDataSource is AutoCloseable) {
-                firstDataSource.close()
+        val firstFlywayRows =
+            try {
+                flywayRows(firstDataSource)
+            } finally {
+                if (firstDataSource is AutoCloseable) {
+                    firstDataSource.close()
+                }
             }
-        }
 
         val secondDataSource = createDataSource(jdbcUrl)
         try {
@@ -56,8 +56,12 @@ class DatabaseFactoryMigrationTest {
                 username = "sa",
                 password = "",
                 maximumPoolSize = 2,
-                migrateOnStartup = true
-            )
+                migrateOnStartup = true,
+                connectionTimeoutMs = 3_000,
+                validationTimeoutMs = 1_000,
+                idleTimeoutMs = 600_000,
+                maxLifetimeMs = 1_800_000,
+            ),
         ).initialize()
     }
 
@@ -79,7 +83,7 @@ class DatabaseFactoryMigrationTest {
                 SELECT COLUMN_NAME
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_NAME = 'integration_outbox'
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.executeQuery().use { rs ->
                     buildSet {

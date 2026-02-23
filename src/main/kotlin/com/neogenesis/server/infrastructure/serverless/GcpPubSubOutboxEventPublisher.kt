@@ -16,18 +16,18 @@ import java.util.concurrent.TimeUnit
 class GcpPubSubOutboxEventPublisher(
     projectId: String,
     topicId: String,
-    emulatorHost: String?
+    emulatorHost: String?,
 ) : OutboxEventPublisher, AutoCloseable {
-
     private val publisher: Publisher
 
     init {
         val topicName = TopicName.of(projectId, topicId)
         val builder = Publisher.newBuilder(topicName)
         if (!emulatorHost.isNullOrBlank()) {
-            val channel = ManagedChannelBuilder.forTarget(emulatorHost)
-                .usePlaintext()
-                .build()
+            val channel =
+                ManagedChannelBuilder.forTarget(emulatorHost)
+                    .usePlaintext()
+                    .build()
             builder
                 .setChannelProvider(FixedTransportChannelProvider.create(GrpcTransportChannel.create(channel)))
                 .setCredentialsProvider(NoCredentialsProvider.create())
@@ -37,17 +37,19 @@ class GcpPubSubOutboxEventPublisher(
 
     override fun publish(event: ServerlessOutboxEvent): PublishResult {
         return try {
-            val message = PubsubMessage.newBuilder()
-                .setData(ByteString.copyFromUtf8(event.payloadJson))
-                .putAttributes("eventType", event.eventType)
-                .putAttributes("partitionKey", event.partitionKey)
-                .putAttributes("outboxId", event.id.toString())
-                .build()
+            val message =
+                PubsubMessage.newBuilder()
+                    .setData(ByteString.copyFromUtf8(event.payloadJson))
+                    .putAttributes("eventType", event.eventType)
+                    .putAttributes("partitionKey", event.partitionKey)
+                    .putAttributes("outboxId", event.id.toString())
+                    .build()
             publisher.publish(message).get(10, TimeUnit.SECONDS)
             PublishResult.Success
         } catch (error: Exception) {
-            val fatal = error.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true ||
-                error.message?.contains("NOT_FOUND", ignoreCase = true) == true
+            val fatal =
+                error.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true ||
+                    error.message?.contains("NOT_FOUND", ignoreCase = true) == true
             if (fatal) {
                 PublishResult.FatalFailure("PubSub fatal error: ${error.message}")
             } else {

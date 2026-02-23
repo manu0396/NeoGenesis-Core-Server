@@ -11,17 +11,22 @@ import java.util.UUID
 class PrintSessionService(
     private val printSessionStore: PrintSessionStore,
     private val auditTrailService: AuditTrailService,
-    private val metricsService: OperationalMetricsService
+    private val metricsService: OperationalMetricsService,
 ) {
-
-    fun create(printerId: String, planId: String, patientId: String, actor: String): PrintSession {
-        val session = PrintSession(
-            sessionId = "print-session-${UUID.randomUUID()}",
-            printerId = printerId,
-            planId = planId,
-            patientId = patientId,
-            status = PrintSessionStatus.CREATED
-        )
+    fun create(
+        printerId: String,
+        planId: String,
+        patientId: String,
+        actor: String,
+    ): PrintSession {
+        val session =
+            PrintSession(
+                sessionId = "print-session-${UUID.randomUUID()}",
+                printerId = printerId,
+                planId = planId,
+                patientId = patientId,
+                status = PrintSessionStatus.CREATED,
+            )
 
         printSessionStore.create(session)
         audit(actor, "print.session.create", session.sessionId, session.printerId, session.status)
@@ -29,7 +34,10 @@ class PrintSessionService(
         return session
     }
 
-    fun activate(sessionId: String, actor: String): PrintSession? {
+    fun activate(
+        sessionId: String,
+        actor: String,
+    ): PrintSession? {
         val session = printSessionStore.findBySessionId(sessionId) ?: return null
 
         val active = printSessionStore.findActiveByPrinterId(session.printerId)
@@ -46,11 +54,17 @@ class PrintSessionService(
         return updated
     }
 
-    fun complete(sessionId: String, actor: String): PrintSession? {
+    fun complete(
+        sessionId: String,
+        actor: String,
+    ): PrintSession? {
         return updateStatus(sessionId, PrintSessionStatus.COMPLETED, actor, "print.session.complete")
     }
 
-    fun abort(sessionId: String, actor: String): PrintSession? {
+    fun abort(
+        sessionId: String,
+        actor: String,
+    ): PrintSession? {
         return updateStatus(sessionId, PrintSessionStatus.ABORTED, actor, "print.session.abort")
     }
 
@@ -62,7 +76,7 @@ class PrintSessionService(
         sessionId: String,
         status: PrintSessionStatus,
         actor: String,
-        action: String
+        action: String,
     ): PrintSession? {
         val session = printSessionStore.findBySessionId(sessionId) ?: return null
         printSessionStore.updateStatus(session.sessionId, status, System.currentTimeMillis())
@@ -74,7 +88,13 @@ class PrintSessionService(
         return updated
     }
 
-    private fun audit(actor: String, action: String, sessionId: String, printerId: String, status: PrintSessionStatus) {
+    private fun audit(
+        actor: String,
+        action: String,
+        sessionId: String,
+        printerId: String,
+        status: PrintSessionStatus,
+    ) {
         auditTrailService.record(
             AuditEvent(
                 actor = actor,
@@ -83,11 +103,12 @@ class PrintSessionService(
                 resourceId = sessionId,
                 outcome = "success",
                 requirementIds = listOf("REQ-ISO-002", "REQ-ISO-005"),
-                details = mapOf(
-                    "printerId" to printerId,
-                    "status" to status.name
-                )
-            )
+                details =
+                    mapOf(
+                        "printerId" to printerId,
+                        "status" to status.name,
+                    ),
+            ),
         )
     }
 }

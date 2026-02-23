@@ -11,7 +11,7 @@ import java.time.Instant
 import javax.sql.DataSource
 
 class JdbcRegulatoryStore(
-    private val dataSource: DataSource
+    private val dataSource: DataSource,
 ) : RegulatoryStore {
     override fun createCapa(record: CapaRecord): CapaRecord {
         dataSource.connection.use { connection ->
@@ -27,7 +27,7 @@ class JdbcRegulatoryStore(
                     updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                java.sql.Statement.RETURN_GENERATED_KEYS
+                java.sql.Statement.RETURN_GENERATED_KEYS,
             ).use { statement ->
                 statement.setString(1, record.title)
                 statement.setString(2, record.description)
@@ -61,7 +61,7 @@ class JdbcRegulatoryStore(
                 FROM capa_records
                 ORDER BY updated_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -75,14 +75,18 @@ class JdbcRegulatoryStore(
         }
     }
 
-    override fun updateCapaStatus(capaId: Long, status: String, updatedAtMs: Long): Boolean {
+    override fun updateCapaStatus(
+        capaId: Long,
+        status: String,
+        updatedAtMs: Long,
+    ): Boolean {
         return dataSource.connection.use { connection ->
             connection.prepareStatement(
                 """
                 UPDATE capa_records
                 SET status = ?, updated_at = ?
                 WHERE id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, status)
                 statement.setTimestamp(2, Timestamp.from(Instant.ofEpochMilli(updatedAtMs)))
@@ -94,34 +98,35 @@ class JdbcRegulatoryStore(
 
     override fun upsertRisk(record: RiskRecord) {
         dataSource.connection.use { connection ->
-            val updated = connection.prepareStatement(
-                """
-                UPDATE risk_register
-                SET
-                    hazard_description = ?,
-                    severity = ?,
-                    probability = ?,
-                    detectability = ?,
-                    controls = ?,
-                    residual_risk_level = ?,
-                    linked_requirement_id = ?,
-                    owner = ?,
-                    updated_at = ?
-                WHERE risk_id = ?
-                """.trimIndent()
-            ).use { statement ->
-                statement.setString(1, record.hazardDescription)
-                statement.setInt(2, record.severity)
-                statement.setInt(3, record.probability)
-                statement.setInt(4, record.detectability)
-                statement.setString(5, record.controls)
-                statement.setInt(6, record.residualRiskLevel)
-                statement.setString(7, record.linkedRequirementId)
-                statement.setString(8, record.owner)
-                statement.setTimestamp(9, Timestamp.from(Instant.ofEpochMilli(record.updatedAtMs)))
-                statement.setString(10, record.riskId)
-                statement.executeUpdate()
-            }
+            val updated =
+                connection.prepareStatement(
+                    """
+                    UPDATE risk_register
+                    SET
+                        hazard_description = ?,
+                        severity = ?,
+                        probability = ?,
+                        detectability = ?,
+                        controls = ?,
+                        residual_risk_level = ?,
+                        linked_requirement_id = ?,
+                        owner = ?,
+                        updated_at = ?
+                    WHERE risk_id = ?
+                    """.trimIndent(),
+                ).use { statement ->
+                    statement.setString(1, record.hazardDescription)
+                    statement.setInt(2, record.severity)
+                    statement.setInt(3, record.probability)
+                    statement.setInt(4, record.detectability)
+                    statement.setString(5, record.controls)
+                    statement.setInt(6, record.residualRiskLevel)
+                    statement.setString(7, record.linkedRequirementId)
+                    statement.setString(8, record.owner)
+                    statement.setTimestamp(9, Timestamp.from(Instant.ofEpochMilli(record.updatedAtMs)))
+                    statement.setString(10, record.riskId)
+                    statement.executeUpdate()
+                }
 
             if (updated == 0) {
                 connection.prepareStatement(
@@ -139,7 +144,7 @@ class JdbcRegulatoryStore(
                         created_at,
                         updated_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """.trimIndent()
+                    """.trimIndent(),
                 ).use { statement ->
                     statement.setString(1, record.riskId)
                     statement.setString(2, record.hazardDescription)
@@ -177,7 +182,7 @@ class JdbcRegulatoryStore(
                 FROM risk_register
                 ORDER BY updated_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -205,7 +210,7 @@ class JdbcRegulatoryStore(
                     approved_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                java.sql.Statement.RETURN_GENERATED_KEYS
+                java.sql.Statement.RETURN_GENERATED_KEYS,
             ).use { statement ->
                 statement.setString(1, artifact.artifactType)
                 statement.setString(2, artifact.artifactName)
@@ -239,7 +244,7 @@ class JdbcRegulatoryStore(
                 FROM dhf_artifacts
                 ORDER BY approved_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -263,7 +268,7 @@ private fun ResultSet.toCapaRecord(): CapaRecord {
         owner = getString("owner"),
         status = CapaStatus.valueOf(getString("status")),
         createdAtMs = getTimestamp("created_at").time,
-        updatedAtMs = getTimestamp("updated_at").time
+        updatedAtMs = getTimestamp("updated_at").time,
     )
 }
 
@@ -279,7 +284,7 @@ private fun ResultSet.toRiskRecord(): RiskRecord {
         linkedRequirementId = getString("linked_requirement_id"),
         owner = getString("owner"),
         createdAtMs = getTimestamp("created_at").time,
-        updatedAtMs = getTimestamp("updated_at").time
+        updatedAtMs = getTimestamp("updated_at").time,
     )
 }
 
@@ -292,6 +297,6 @@ private fun ResultSet.toDhfArtifact(): DhfArtifact {
         location = getString("location"),
         checksumSha256 = getString("checksum_sha256"),
         approvedBy = getString("approved_by"),
-        approvedAtMs = getTimestamp("approved_at").time
+        approvedAtMs = getTimestamp("approved_at").time,
     )
 }

@@ -5,8 +5,8 @@ import com.neogenesis.server.application.port.ClinicalDocumentStore
 import com.neogenesis.server.application.port.ControlCommandStore
 import com.neogenesis.server.application.port.DigitalTwinStore
 import com.neogenesis.server.application.port.TelemetryEventStore
-import com.neogenesis.server.domain.model.AuditEvent
 import com.neogenesis.server.domain.model.AuditChainVerification
+import com.neogenesis.server.domain.model.AuditEvent
 import com.neogenesis.server.domain.model.ClinicalDocument
 import com.neogenesis.server.domain.model.ControlActionType
 import com.neogenesis.server.domain.model.ControlCommand
@@ -20,11 +20,11 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.security.MessageDigest
 import java.sql.ResultSet
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.Base64
-import java.security.MessageDigest
 import javax.sql.DataSource
 
 private val json = Json { ignoreUnknownKeys = true }
@@ -50,7 +50,7 @@ class JdbcTelemetryEventStore(private val dataSource: DataSource) : TelemetryEve
                     tissue_type,
                     created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, event.telemetry.printerId)
                 statement.setLong(2, event.telemetry.timestampMs)
@@ -93,7 +93,7 @@ class JdbcTelemetryEventStore(private val dataSource: DataSource) : TelemetryEve
                 FROM telemetry_events
                 ORDER BY created_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -122,7 +122,7 @@ class JdbcControlCommandStore(private val dataSource: DataSource) : ControlComma
                     reason,
                     created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, event.command.commandId)
                 statement.setString(2, event.command.printerId)
@@ -151,7 +151,7 @@ class JdbcControlCommandStore(private val dataSource: DataSource) : ControlComma
                 FROM control_commands
                 ORDER BY created_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -159,16 +159,17 @@ class JdbcControlCommandStore(private val dataSource: DataSource) : ControlComma
                         while (rs.next()) {
                             add(
                                 ControlCommandEvent(
-                                    command = ControlCommand(
-                                        commandId = rs.getString("command_id"),
-                                        printerId = rs.getString("printer_id"),
-                                        actionType = ControlActionType.valueOf(rs.getString("action_type")),
-                                        adjustPressure = rs.getFloat("adjust_pressure"),
-                                        adjustSpeed = rs.getFloat("adjust_speed"),
-                                        reason = rs.getString("reason")
-                                    ),
-                                    createdAtMs = rs.getTimestamp("created_at").time
-                                )
+                                    command =
+                                        ControlCommand(
+                                            commandId = rs.getString("command_id"),
+                                            printerId = rs.getString("printer_id"),
+                                            actionType = ControlActionType.valueOf(rs.getString("action_type")),
+                                            adjustPressure = rs.getFloat("adjust_pressure"),
+                                            adjustSpeed = rs.getFloat("adjust_speed"),
+                                            reason = rs.getString("reason"),
+                                        ),
+                                    createdAtMs = rs.getTimestamp("created_at").time,
+                                ),
                             )
                         }
                     }
@@ -181,28 +182,29 @@ class JdbcControlCommandStore(private val dataSource: DataSource) : ControlComma
 class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStore {
     override fun upsert(state: DigitalTwinState) {
         dataSource.connection.use { connection ->
-            val updatedRows = connection.prepareStatement(
-                """
-                UPDATE digital_twin_snapshots
-                SET
-                    updated_at_ms = ?,
-                    current_viability = ?,
-                    predicted_viability_5m = ?,
-                    collapse_risk_score = ?,
-                    recommended_action = ?,
-                    confidence = ?
-                WHERE printer_id = ?
-                """.trimIndent()
-            ).use { statement ->
-                statement.setLong(1, state.updatedAtMs)
-                statement.setFloat(2, state.currentViability)
-                statement.setFloat(3, state.predictedViability5m)
-                statement.setFloat(4, state.collapseRiskScore)
-                statement.setString(5, state.recommendedAction.name)
-                statement.setFloat(6, state.confidence)
-                statement.setString(7, state.printerId)
-                statement.executeUpdate()
-            }
+            val updatedRows =
+                connection.prepareStatement(
+                    """
+                    UPDATE digital_twin_snapshots
+                    SET
+                        updated_at_ms = ?,
+                        current_viability = ?,
+                        predicted_viability_5m = ?,
+                        collapse_risk_score = ?,
+                        recommended_action = ?,
+                        confidence = ?
+                    WHERE printer_id = ?
+                    """.trimIndent(),
+                ).use { statement ->
+                    statement.setLong(1, state.updatedAtMs)
+                    statement.setFloat(2, state.currentViability)
+                    statement.setFloat(3, state.predictedViability5m)
+                    statement.setFloat(4, state.collapseRiskScore)
+                    statement.setString(5, state.recommendedAction.name)
+                    statement.setFloat(6, state.confidence)
+                    statement.setString(7, state.printerId)
+                    statement.executeUpdate()
+                }
 
             if (updatedRows == 0) {
                 connection.prepareStatement(
@@ -216,7 +218,7 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                         recommended_action,
                         confidence
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """.trimIndent()
+                    """.trimIndent(),
                 ).use { statement ->
                     statement.setString(1, state.printerId)
                     statement.setLong(2, state.updatedAtMs)
@@ -245,7 +247,7 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                     confidence
                 FROM digital_twin_snapshots
                 WHERE printer_id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, printerId)
                 statement.executeQuery().use { rs ->
@@ -269,7 +271,7 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                     confidence
                 FROM digital_twin_snapshots
                 ORDER BY updated_at_ms DESC
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.executeQuery().use { rs ->
                     buildList {
@@ -286,14 +288,16 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
 class JdbcClinicalDocumentStore(
     private val dataSource: DataSource,
     private val dataProtectionService: DataProtectionService? = null,
-    private val defaultRetentionDays: Int = 3650
+    private val defaultRetentionDays: Int = 3650,
 ) : ClinicalDocumentStore {
     override fun append(document: ClinicalDocument) {
         val classification = document.metadata["dataClassification"] ?: "PHI"
-        val protectedPayload = dataProtectionService?.protect(document.content, classification)
-            ?: com.neogenesis.server.infrastructure.security.ProtectedPayload(document.content, null)
-        val retentionUntil = Instant.ofEpochMilli(document.createdAtMs)
-            .plusSeconds(defaultRetentionDays.toLong() * 24L * 3600L)
+        val protectedPayload =
+            dataProtectionService?.protect(document.content, classification)
+                ?: com.neogenesis.server.infrastructure.security.ProtectedPayload(document.content, null)
+        val retentionUntil =
+            Instant.ofEpochMilli(document.createdAtMs)
+                .plusSeconds(defaultRetentionDays.toLong() * 24L * 3600L)
         dataSource.connection.use { connection ->
             connection.prepareStatement(
                 """
@@ -308,7 +312,7 @@ class JdbcClinicalDocumentStore(
                     retention_until,
                     created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, document.documentType.name)
                 statement.setString(2, document.externalId)
@@ -338,7 +342,7 @@ class JdbcClinicalDocumentStore(
                 FROM clinical_documents
                 ORDER BY created_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -347,8 +351,8 @@ class JdbcClinicalDocumentStore(
                             val raw = rs.toClinicalDocument()
                             add(
                                 raw.copy(
-                                    content = dataProtectionService?.unprotect(raw.content) ?: raw.content
-                                )
+                                    content = dataProtectionService?.unprotect(raw.content) ?: raw.content,
+                                ),
                             )
                         }
                     }
@@ -357,7 +361,10 @@ class JdbcClinicalDocumentStore(
         }
     }
 
-    override fun findByPatientId(patientId: String, limit: Int): List<ClinicalDocument> {
+    override fun findByPatientId(
+        patientId: String,
+        limit: Int,
+    ): List<ClinicalDocument> {
         return dataSource.connection.use { connection ->
             connection.prepareStatement(
                 """
@@ -372,7 +379,7 @@ class JdbcClinicalDocumentStore(
                 WHERE patient_id = ?
                 ORDER BY created_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, patientId)
                 statement.setInt(2, limit)
@@ -382,8 +389,8 @@ class JdbcClinicalDocumentStore(
                             val raw = rs.toClinicalDocument()
                             add(
                                 raw.copy(
-                                    content = dataProtectionService?.unprotect(raw.content) ?: raw.content
-                                )
+                                    content = dataProtectionService?.unprotect(raw.content) ?: raw.content,
+                                ),
                             )
                         }
                     }
@@ -396,18 +403,19 @@ class JdbcClinicalDocumentStore(
 class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore {
     override fun append(event: AuditEvent) {
         dataSource.connection.use { connection ->
-            val previousHash = connection.prepareStatement(
-                """
-                SELECT event_hash
-                FROM audit_events
-                ORDER BY id DESC
-                LIMIT 1
-                """.trimIndent()
-            ).use { statement ->
-                statement.executeQuery().use { rs ->
-                    if (rs.next()) rs.getString("event_hash") else null
+            val previousHash =
+                connection.prepareStatement(
+                    """
+                    SELECT event_hash
+                    FROM audit_events
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """.trimIndent(),
+                ).use { statement ->
+                    statement.executeQuery().use { rs ->
+                        if (rs.next()) rs.getString("event_hash") else null
+                    }
                 }
-            }
             val eventHash = computeAuditHash(previousHash, event)
 
             connection.prepareStatement(
@@ -424,7 +432,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                     event_hash,
                     created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, event.actor)
                 statement.setString(2, event.action)
@@ -457,7 +465,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                 FROM audit_events
                 ORDER BY created_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -470,13 +478,14 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                                     resourceType = rs.getString("resource_type"),
                                     resourceId = rs.getString("resource_id"),
                                     outcome = rs.getString("outcome"),
-                                    requirementIds = rs.getString("requirement_ids")
-                                        .split(',')
-                                        .map { it.trim() }
-                                        .filter { it.isNotBlank() },
+                                    requirementIds =
+                                        rs.getString("requirement_ids")
+                                            .split(',')
+                                            .map { it.trim() }
+                                            .filter { it.isNotBlank() },
                                     details = decodeMap(rs.getString("details_json")),
-                                    createdAtMs = rs.getTimestamp("created_at").time
-                                )
+                                    createdAtMs = rs.getTimestamp("created_at").time,
+                                ),
                             )
                         }
                     }
@@ -503,7 +512,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                 FROM audit_events
                 ORDER BY id ASC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -511,19 +520,21 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                     var previousHash: String? = null
                     while (rs.next()) {
                         index++
-                        val event = AuditEvent(
-                            actor = rs.getString("actor"),
-                            action = rs.getString("action"),
-                            resourceType = rs.getString("resource_type"),
-                            resourceId = rs.getString("resource_id"),
-                            outcome = rs.getString("outcome"),
-                            requirementIds = rs.getString("requirement_ids")
-                                .split(',')
-                                .map { it.trim() }
-                                .filter { it.isNotBlank() },
-                            details = decodeMap(rs.getString("details_json")),
-                            createdAtMs = rs.getTimestamp("created_at").time
-                        )
+                        val event =
+                            AuditEvent(
+                                actor = rs.getString("actor"),
+                                action = rs.getString("action"),
+                                resourceType = rs.getString("resource_type"),
+                                resourceId = rs.getString("resource_id"),
+                                outcome = rs.getString("outcome"),
+                                requirementIds =
+                                    rs.getString("requirement_ids")
+                                        .split(',')
+                                        .map { it.trim() }
+                                        .filter { it.isNotBlank() },
+                                details = decodeMap(rs.getString("details_json")),
+                                createdAtMs = rs.getTimestamp("created_at").time,
+                            )
                         val storedPrevious = rs.getString("previous_hash")
                         val storedHash = rs.getString("event_hash")
 
@@ -532,7 +543,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                                 valid = false,
                                 checkedEvents = index,
                                 failureIndex = index,
-                                failureReason = "previous hash mismatch"
+                                failureReason = "previous hash mismatch",
                             )
                         }
 
@@ -542,7 +553,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                                 valid = false,
                                 checkedEvents = index,
                                 failureIndex = index,
-                                failureReason = "event hash mismatch"
+                                failureReason = "event hash mismatch",
                             )
                         }
                         previousHash = storedHash
@@ -551,7 +562,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                         valid = true,
                         checkedEvents = index,
                         failureIndex = null,
-                        failureReason = null
+                        failureReason = null,
                     )
                 }
             }
@@ -562,22 +573,23 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
 private fun ResultSet.toTelemetryEvent(): TelemetryEvent {
     val encodedImage = getString("encrypted_image_matrix_base64") ?: ""
     return TelemetryEvent(
-        telemetry = TelemetryState(
-            printerId = getString("printer_id"),
-            timestampMs = getLong("timestamp_ms"),
-            nozzleTempCelsius = getFloat("nozzle_temp_celsius"),
-            extrusionPressureKPa = getFloat("extrusion_pressure_kpa"),
-            cellViabilityIndex = getFloat("cell_viability_index"),
-            encryptedImageMatrix = if (encodedImage.isBlank()) byteArrayOf() else Base64.getDecoder().decode(encodedImage),
-            bioInkViscosityIndex = getFloatSafely("bio_ink_viscosity_index", 0.0f),
-            bioInkPh = getFloatSafely("bio_ink_ph", 7.4f),
-            nirIiTempCelsius = getFloatSafely("nir_ii_temp_celsius", 37.0f),
-            morphologicalDefectProbability = getFloatSafely("morphological_defect_probability", 0.0f),
-            printJobId = getStringSafely("print_job_id", ""),
-            tissueType = getStringSafely("tissue_type", "retina")
-        ),
+        telemetry =
+            TelemetryState(
+                printerId = getString("printer_id"),
+                timestampMs = getLong("timestamp_ms"),
+                nozzleTempCelsius = getFloat("nozzle_temp_celsius"),
+                extrusionPressureKPa = getFloat("extrusion_pressure_kpa"),
+                cellViabilityIndex = getFloat("cell_viability_index"),
+                encryptedImageMatrix = if (encodedImage.isBlank()) byteArrayOf() else Base64.getDecoder().decode(encodedImage),
+                bioInkViscosityIndex = getFloatSafely("bio_ink_viscosity_index", 0.0f),
+                bioInkPh = getFloatSafely("bio_ink_ph", 7.4f),
+                nirIiTempCelsius = getFloatSafely("nir_ii_temp_celsius", 37.0f),
+                morphologicalDefectProbability = getFloatSafely("morphological_defect_probability", 0.0f),
+                printJobId = getStringSafely("print_job_id", ""),
+                tissueType = getStringSafely("tissue_type", "retina"),
+            ),
         source = getString("source"),
-        createdAtMs = getTimestamp("created_at").time
+        createdAtMs = getTimestamp("created_at").time,
     )
 }
 
@@ -589,7 +601,7 @@ private fun ResultSet.toDigitalTwinState(): DigitalTwinState {
         predictedViability5m = getFloat("predicted_viability_5m"),
         collapseRiskScore = getFloat("collapse_risk_score"),
         recommendedAction = ControlActionType.valueOf(getString("recommended_action")),
-        confidence = getFloat("confidence")
+        confidence = getFloat("confidence"),
     )
 }
 
@@ -600,7 +612,7 @@ private fun ResultSet.toClinicalDocument(): ClinicalDocument {
         patientId = getString("patient_id"),
         content = getString("content"),
         metadata = decodeMap(getString("metadata_json")),
-        createdAtMs = getTimestamp("created_at").time
+        createdAtMs = getTimestamp("created_at").time,
     )
 }
 
@@ -619,34 +631,44 @@ private fun decodeMap(value: String?): Map<String, String> {
     }
 }
 
-private fun computeAuditHash(previousHash: String?, event: AuditEvent): String {
-    val canonical = buildString {
-        append(previousHash.orEmpty())
-        append('|')
-        append(event.actor)
-        append('|')
-        append(event.action)
-        append('|')
-        append(event.resourceType)
-        append('|')
-        append(event.resourceId.orEmpty())
-        append('|')
-        append(event.outcome)
-        append('|')
-        append(event.requirementIds.joinToString(","))
-        append('|')
-        append(event.details.toSortedMap().entries.joinToString(",") { "${it.key}=${it.value}" })
-        append('|')
-        append(event.createdAtMs)
-    }
+private fun computeAuditHash(
+    previousHash: String?,
+    event: AuditEvent,
+): String {
+    val canonical =
+        buildString {
+            append(previousHash.orEmpty())
+            append('|')
+            append(event.actor)
+            append('|')
+            append(event.action)
+            append('|')
+            append(event.resourceType)
+            append('|')
+            append(event.resourceId.orEmpty())
+            append('|')
+            append(event.outcome)
+            append('|')
+            append(event.requirementIds.joinToString(","))
+            append('|')
+            append(event.details.toSortedMap().entries.joinToString(",") { "${it.key}=${it.value}" })
+            append('|')
+            append(event.createdAtMs)
+        }
     val digest = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(Charsets.UTF_8))
     return digest.joinToString("") { "%02x".format(it) }
 }
 
-private fun ResultSet.getFloatSafely(column: String, fallback: Float): Float {
+private fun ResultSet.getFloatSafely(
+    column: String,
+    fallback: Float,
+): Float {
     return runCatching { getFloat(column) }.getOrElse { fallback }
 }
 
-private fun ResultSet.getStringSafely(column: String, fallback: String): String {
+private fun ResultSet.getStringSafely(
+    column: String,
+    fallback: String,
+): String {
     return runCatching { getString(column) ?: fallback }.getOrElse { fallback }
 }

@@ -10,5 +10,5 @@ data class DigitalTwinState(
     val predictedViability5m: Float,
     val collapseRiskScore: Float,
     val recommendedAction: ControlActionType,
-    val confidence: Float
+    val confidence: Float,
 )

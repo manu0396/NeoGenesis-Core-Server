@@ -12,17 +12,18 @@ import kotlin.math.abs
 class ClosedLoopControlService(
     private val decisionService: ControlDecisionService,
     private val printSessionStore: PrintSessionStore,
-    private val retinalPlanStore: RetinalPlanStore
+    private val retinalPlanStore: RetinalPlanStore,
 ) {
-
     fun decide(telemetry: TelemetryState): ControlCommand {
         val baseline = decisionService.evaluate(telemetry)
 
-        val activeSession = printSessionStore.findActiveByPrinterId(telemetry.printerId)
-            ?: return baseline
+        val activeSession =
+            printSessionStore.findActiveByPrinterId(telemetry.printerId)
+                ?: return baseline
 
-        val plan = retinalPlanStore.findByPlanId(activeSession.planId)
-            ?: return baseline.copy(reason = "${baseline.reason}; active session without retinal plan")
+        val plan =
+            retinalPlanStore.findByPlanId(activeSession.planId)
+                ?: return baseline.copy(reason = "${baseline.reason}; active session without retinal plan")
 
         val constraints = plan.constraints
 
@@ -36,23 +37,25 @@ class ClosedLoopControlService(
                 commandId = commandId(),
                 printerId = telemetry.printerId,
                 actionType = ControlActionType.EMERGENCY_HALT,
-                reason = "Retina plan threshold breach for session ${activeSession.sessionId}"
+                reason = "Retina plan threshold breach for session ${activeSession.sessionId}",
             )
         }
 
         val pressureDelta = constraints.targetPressureKPa - telemetry.extrusionPressureKPa
-        val pressureAdjust = if (abs(pressureDelta) > constraints.pressureToleranceKPa) {
-            pressureDelta.coerceIn(-12.0f, 12.0f)
-        } else {
-            0.0f
-        }
+        val pressureAdjust =
+            if (abs(pressureDelta) > constraints.pressureToleranceKPa) {
+                pressureDelta.coerceIn(-12.0f, 12.0f)
+            } else {
+                0.0f
+            }
 
         val tempDelta = constraints.targetNozzleTempCelsius - telemetry.nozzleTempCelsius
-        val speedAdjust = if (abs(tempDelta) > constraints.tempToleranceCelsius) {
-            if (tempDelta > 0) -0.10f else 0.10f
-        } else {
-            0.0f
-        }
+        val speedAdjust =
+            if (abs(tempDelta) > constraints.tempToleranceCelsius) {
+                if (tempDelta > 0) -0.10f else 0.10f
+            } else {
+                0.0f
+            }
 
         if (pressureAdjust != 0.0f || speedAdjust != 0.0f) {
             return ControlCommand(
@@ -61,12 +64,12 @@ class ClosedLoopControlService(
                 actionType = ControlActionType.ADJUST,
                 adjustPressure = pressureAdjust,
                 adjustSpeed = speedAdjust,
-                reason = "Retina closed-loop correction for plan ${plan.planId}"
+                reason = "Retina closed-loop correction for plan ${plan.planId}",
             )
         }
 
         return baseline.copy(
-            reason = "${baseline.reason}; retina constraints satisfied (${plan.planId})"
+            reason = "${baseline.reason}; retina constraints satisfied (${plan.planId})",
         )
     }
 

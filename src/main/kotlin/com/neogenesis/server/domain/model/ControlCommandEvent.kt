@@ -2,5 +2,5 @@
 
 data class ControlCommandEvent(
     val command: ControlCommand,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = System.currentTimeMillis(),
 )

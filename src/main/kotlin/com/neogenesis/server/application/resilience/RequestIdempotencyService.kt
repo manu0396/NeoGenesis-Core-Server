@@ -9,12 +9,12 @@ import java.security.MessageDigest
 class RequestIdempotencyService(
     private val store: RequestIdempotencyStore,
     private val metricsService: OperationalMetricsService,
-    private val ttlSeconds: Long
+    private val ttlSeconds: Long,
 ) {
     fun assertOrRemember(
         operation: String,
         idempotencyKey: String,
-        canonicalPayload: String
+        canonicalPayload: String,
     ) {
         val payloadHash = sha256(canonicalPayload)
         when (
@@ -22,7 +22,7 @@ class RequestIdempotencyService(
                 operation = operation,
                 key = idempotencyKey,
                 payloadHash = payloadHash,
-                ttlSeconds = ttlSeconds
+                ttlSeconds = ttlSeconds,
             )
         ) {
             IdempotencyRememberResult.STORED -> Unit
@@ -33,7 +33,7 @@ class RequestIdempotencyService(
                 metricsService.recordIdempotencyDuplicate(operation, "mismatch")
                 throw ConflictException(
                     code = "idempotency_key_payload_mismatch",
-                    message = "Idempotency key already used with different payload"
+                    message = "Idempotency key already used with different payload",
                 )
             }
         }

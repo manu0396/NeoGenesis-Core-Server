@@ -11,5 +11,5 @@ data class DhfArtifact(
     val location: String,
     val checksumSha256: String,
     val approvedBy: String,
-    val approvedAtMs: Long = System.currentTimeMillis()
+    val approvedAtMs: Long = System.currentTimeMillis(),
 )

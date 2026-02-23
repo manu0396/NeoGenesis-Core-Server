@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class ComplianceTraceabilityServiceTest {
-
     @Test
     fun `loads traceability requirements from classpath`() {
         val service = ComplianceTraceabilityService.fromClasspath()

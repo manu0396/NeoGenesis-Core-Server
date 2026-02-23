@@ -8,5 +8,5 @@ data class AuditEvent(
     val outcome: String,
     val requirementIds: List<String>,
     val details: Map<String, String>,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = System.currentTimeMillis(),
 )

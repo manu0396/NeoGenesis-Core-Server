@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 enum class CapaStatus {
     OPEN,
     IN_PROGRESS,
-    CLOSED
+    CLOSED,
 }
 
 @Serializable
@@ -18,5 +18,5 @@ data class CapaRecord(
     val owner: String,
     val status: CapaStatus = CapaStatus.OPEN,
     val createdAtMs: Long = System.currentTimeMillis(),
-    val updatedAtMs: Long = System.currentTimeMillis()
+    val updatedAtMs: Long = System.currentTimeMillis(),
 )

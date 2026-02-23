@@ -6,10 +6,9 @@ import com.neogenesis.server.infrastructure.config.AppConfig
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
 import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -17,46 +16,49 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
-import io.ktor.serialization.kotlinx.json.json
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import kotlinx.serialization.Serializable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class SecurityPluginsTest {
-
     @Test
-    fun `returns 401 when missing JWT`() = testApplication {
-        application { configureSecuredTestApp() }
+    fun `returns 401 when missing JWT`() =
+        testApplication {
+            application { configureSecuredTestApp() }
 
-        val response = client.get("/secure")
+            val response = client.get("/secure")
 
-        assertEquals(HttpStatusCode.Unauthorized, response.status)
-    }
-
-    @Test
-    fun `returns 403 when role is insufficient`() = testApplication {
-        application { configureSecuredTestApp() }
-
-        val token = issueToken(roles = listOf("viewer"))
-        val response = client.get("/secure") {
-            header(HttpHeaders.Authorization, "Bearer $token")
+            assertEquals(HttpStatusCode.Unauthorized, response.status)
         }
 
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-    }
-
     @Test
-    fun `returns 200 when role is authorized`() = testApplication {
-        application { configureSecuredTestApp() }
+    fun `returns 403 when role is insufficient`() =
+        testApplication {
+            application { configureSecuredTestApp() }
 
-        val token = issueToken(roles = listOf("controller"))
-        val response = client.get("/secure") {
-            header(HttpHeaders.Authorization, "Bearer $token")
+            val token = issueToken(roles = listOf("viewer"))
+            val response =
+                client.get("/secure") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                }
+
+            assertEquals(HttpStatusCode.Forbidden, response.status)
         }
 
-        assertEquals(HttpStatusCode.OK, response.status)
-    }
+    @Test
+    fun `returns 200 when role is authorized`() =
+        testApplication {
+            application { configureSecuredTestApp() }
+
+            val token = issueToken(roles = listOf("controller"))
+            val response =
+                client.get("/secure") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                }
+
+            assertEquals(HttpStatusCode.OK, response.status)
+        }
 
     private fun io.ktor.server.application.Application.configureSecuredTestApp() {
         install(ContentNegotiation) {
@@ -68,20 +70,21 @@ class SecurityPluginsTest {
             }
         }
         configureAuthentication(
-            config = AppConfig.SecurityConfig.JwtConfig(
-                realm = TEST_REALM,
-                issuer = TEST_ISSUER,
-                audience = TEST_AUDIENCE,
-                secret = TEST_SECRET,
-                mode = "hmac",
-                jwksUrl = null
-            ),
-            verifier = verifier()
+            config =
+                AppConfig.SecurityConfig.JwtConfig(
+                    realm = TEST_REALM,
+                    issuer = TEST_ISSUER,
+                    audience = TEST_AUDIENCE,
+                    secret = TEST_SECRET,
+                    mode = "hmac",
+                    jwksUrl = null,
+                ),
+            verifier = verifier(),
         )
         routing {
             secured(
                 requiredRoles = setOf("controller"),
-                metricsService = OperationalMetricsService(SimpleMeterRegistry())
+                metricsService = OperationalMetricsService(SimpleMeterRegistry()),
             ) {
                 get("/secure") {
                     call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
@@ -99,10 +102,11 @@ class SecurityPluginsTest {
             .sign(Algorithm.HMAC256(TEST_SECRET))
     }
 
-    private fun verifier() = JWT.require(Algorithm.HMAC256(TEST_SECRET))
-        .withIssuer(TEST_ISSUER)
-        .withAudience(TEST_AUDIENCE)
-        .build()
+    private fun verifier() =
+        JWT.require(Algorithm.HMAC256(TEST_SECRET))
+            .withIssuer(TEST_ISSUER)
+            .withAudience(TEST_AUDIENCE)
+            .build()
 
     companion object {
         private const val TEST_REALM = "NeoGenesis"
@@ -114,5 +118,5 @@ class SecurityPluginsTest {
 
 @Serializable
 private data class ApiError(
-    val error: String
+    val error: String,
 )

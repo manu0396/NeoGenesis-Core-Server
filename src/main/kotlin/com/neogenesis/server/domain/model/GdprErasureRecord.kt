@@ -10,5 +10,5 @@ data class GdprErasureRecord(
     val reason: String,
     val outcome: String,
     val affectedRows: Int,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = System.currentTimeMillis(),
 )

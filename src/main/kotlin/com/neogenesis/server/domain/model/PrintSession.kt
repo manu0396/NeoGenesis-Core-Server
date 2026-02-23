@@ -8,7 +8,7 @@ enum class PrintSessionStatus {
     ACTIVE,
     PAUSED,
     COMPLETED,
-    ABORTED
+    ABORTED,
 }
 
 @Serializable
@@ -19,5 +19,5 @@ data class PrintSession(
     val patientId: String,
     val status: PrintSessionStatus,
     val createdAtMs: Long = System.currentTimeMillis(),
-    val updatedAtMs: Long = System.currentTimeMillis()
+    val updatedAtMs: Long = System.currentTimeMillis(),
 )

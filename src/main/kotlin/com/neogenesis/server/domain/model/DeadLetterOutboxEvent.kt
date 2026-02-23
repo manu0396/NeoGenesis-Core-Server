@@ -12,5 +12,5 @@ data class DeadLetterOutboxEvent(
     val attempts: Int,
     val failureReason: String,
     val createdAtMs: Long,
-    val failedAtMs: Long
+    val failedAtMs: Long,
 )

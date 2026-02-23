@@ -13,24 +13,24 @@ class Hl7MllpGatewayService(
     private val clinicalIntegrationService: ClinicalIntegrationService,
     private val mllpConfig: AppConfig.ClinicalConfig.Hl7MllpConfig,
     private val metricsService: OperationalMetricsService,
-    private val resilienceExecutor: IntegrationResilienceExecutor
+    private val resilienceExecutor: IntegrationResilienceExecutor,
 ) {
-
     fun send(
         message: String,
         host: String,
         port: Int,
-        actor: String
+        actor: String,
     ): String {
         return resilienceExecutor.execute("hl7-mllp", "send") {
             runCatching {
-                val ack = mllpClient.send(
-                    host = host,
-                    port = port,
-                    message = message,
-                    connectTimeoutMs = mllpConfig.connectTimeoutMs,
-                    readTimeoutMs = mllpConfig.readTimeoutMs
-                )
+                val ack =
+                    mllpClient.send(
+                        host = host,
+                        port = port,
+                        message = message,
+                        connectTimeoutMs = mllpConfig.connectTimeoutMs,
+                        readTimeoutMs = mllpConfig.readTimeoutMs,
+                    )
                 clinicalIntegrationService.ingestHl7(message, actor)
                 metricsService.recordMllpOutbound("success")
                 ack
@@ -51,11 +51,16 @@ class Hl7MllpGatewayService(
         }
     }
 
-    private fun buildAck(message: String, code: String, text: String): String {
-        val msh = message.split('\r', '\n')
-            .firstOrNull { it.startsWith("MSH|") }
-            ?.split('|')
-            .orEmpty()
+    private fun buildAck(
+        message: String,
+        code: String,
+        text: String,
+    ): String {
+        val msh =
+            message.split('\r', '\n')
+                .firstOrNull { it.startsWith("MSH|") }
+                ?.split('|')
+                .orEmpty()
 
         val sendingApp = msh.getOrNull(2) ?: "UnknownSender"
         val sendingFacility = msh.getOrNull(3) ?: "UnknownFacility"

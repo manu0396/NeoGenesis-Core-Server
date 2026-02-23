@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 enum class ControlActionType {
     MAINTAIN,
     ADJUST,
-    EMERGENCY_HALT
+    EMERGENCY_HALT,
 }
 
 data class ControlCommand(
@@ -15,5 +15,5 @@ data class ControlCommand(
     val actionType: ControlActionType,
     val adjustPressure: Float = 0.0f,
     val adjustSpeed: Float = 0.0f,
-    val reason: String
+    val reason: String,
 )

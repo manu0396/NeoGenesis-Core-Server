@@ -1,7 +1,17 @@
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{ISO8601} level=%-5level logger=%logger thread=%thread correlation_id=%X{correlation_id:-na} method=%X{method:-na} path=%X{path:-na} msg=%msg%n</pattern>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <timeZone>UTC</timeZone>
+                </timestamp>
+                <logLevel />
+                <loggerName />
+                <threadName />
+                <message />
+                <mdc />
+                <stackTrace />
+            </providers>
         </encoder>
     </appender>
 

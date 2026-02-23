@@ -8,7 +8,6 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 class MedicalDataCipher(base64Key: String) {
-
     private val key = SecretKeySpec(decodeKey(base64Key), "AES")
 
     fun encrypt(data: ByteArray): ByteArray {

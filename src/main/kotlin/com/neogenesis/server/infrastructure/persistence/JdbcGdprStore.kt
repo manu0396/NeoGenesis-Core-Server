@@ -21,7 +21,7 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
                     granted_by,
                     created_at
                 ) VALUES (?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, record.patientId)
                 statement.setString(2, record.purpose)
@@ -34,7 +34,10 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
         }
     }
 
-    override fun latestConsent(patientId: String, purpose: String): GdprConsentRecord? {
+    override fun latestConsent(
+        patientId: String,
+        purpose: String,
+    ): GdprConsentRecord? {
         return dataSource.connection.use { connection ->
             connection.prepareStatement(
                 """
@@ -51,7 +54,7 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
                   AND purpose = ?
                 ORDER BY created_at DESC
                 LIMIT 1
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, patientId)
                 statement.setString(2, purpose)
@@ -66,7 +69,7 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
                             status = ConsentStatus.valueOf(rs.getString("status")),
                             legalBasis = rs.getString("legal_basis"),
                             grantedBy = rs.getString("granted_by"),
-                            createdAtMs = rs.getTimestamp("created_at").time
+                            createdAtMs = rs.getTimestamp("created_at").time,
                         )
                     }
                 }
@@ -86,7 +89,7 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
                     affected_rows,
                     created_at
                 ) VALUES (?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, record.patientId)
                 statement.setString(2, record.requestedBy)
@@ -114,7 +117,7 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
                 FROM gdpr_erasure_requests
                 ORDER BY created_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -128,8 +131,8 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
                                     reason = rs.getString("reason"),
                                     outcome = rs.getString("outcome"),
                                     affectedRows = rs.getInt("affected_rows"),
-                                    createdAtMs = rs.getTimestamp("created_at").time
-                                )
+                                    createdAtMs = rs.getTimestamp("created_at").time,
+                                ),
                             )
                         }
                     }
@@ -149,7 +152,7 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
                     anonymized_at = CURRENT_TIMESTAMP
                 WHERE patient_id = ?
                   AND anonymized_at IS NULL
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, patientId)
                 statement.executeUpdate()
@@ -169,7 +172,7 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
                 WHERE anonymized_at IS NULL
                   AND retention_until IS NOT NULL
                   AND retention_until < CURRENT_TIMESTAMP
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.executeUpdate()
             }

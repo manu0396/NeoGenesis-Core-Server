@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 
 class MedicalDataCipherTest {
-
     @Test
     fun `encrypt and decrypt round trip`() {
         val key = MedicalDataCipher.generateBase64Key()

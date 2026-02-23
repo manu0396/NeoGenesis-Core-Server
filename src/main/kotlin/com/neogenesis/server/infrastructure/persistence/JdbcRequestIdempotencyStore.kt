@@ -7,14 +7,13 @@ import java.time.Instant
 import javax.sql.DataSource
 
 class JdbcRequestIdempotencyStore(
-    private val dataSource: DataSource
+    private val dataSource: DataSource,
 ) : RequestIdempotencyStore {
-
     override fun remember(
         operation: String,
         key: String,
         payloadHash: String,
-        ttlSeconds: Long
+        ttlSeconds: Long,
     ): IdempotencyRememberResult {
         dataSource.connection.use { connection ->
             connection.autoCommit = false
@@ -23,26 +22,27 @@ class JdbcRequestIdempotencyStore(
                     """
                     DELETE FROM request_idempotency
                     WHERE expires_at < CURRENT_TIMESTAMP
-                    """.trimIndent()
+                    """.trimIndent(),
                 ).use { statement ->
                     statement.executeUpdate()
                 }
 
-                val existingHash = connection.prepareStatement(
-                    """
-                    SELECT payload_hash
-                    FROM request_idempotency
-                    WHERE operation = ?
-                      AND idempotency_key = ?
-                      AND expires_at >= CURRENT_TIMESTAMP
-                    """.trimIndent()
-                ).use { statement ->
-                    statement.setString(1, operation)
-                    statement.setString(2, key)
-                    statement.executeQuery().use { rs ->
-                        if (rs.next()) rs.getString("payload_hash") else null
+                val existingHash =
+                    connection.prepareStatement(
+                        """
+                        SELECT payload_hash
+                        FROM request_idempotency
+                        WHERE operation = ?
+                          AND idempotency_key = ?
+                          AND expires_at >= CURRENT_TIMESTAMP
+                        """.trimIndent(),
+                    ).use { statement ->
+                        statement.setString(1, operation)
+                        statement.setString(2, key)
+                        statement.executeQuery().use { rs ->
+                            if (rs.next()) rs.getString("payload_hash") else null
+                        }
                     }
-                }
 
                 if (existingHash != null) {
                     connection.commit()
@@ -63,7 +63,7 @@ class JdbcRequestIdempotencyStore(
                         created_at,
                         expires_at
                     ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
-                    """.trimIndent()
+                    """.trimIndent(),
                 ).use { statement ->
                     statement.setString(1, operation)
                     statement.setString(2, key)

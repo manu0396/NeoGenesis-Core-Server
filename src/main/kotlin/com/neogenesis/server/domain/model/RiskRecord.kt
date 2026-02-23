@@ -14,5 +14,5 @@ data class RiskRecord(
     val linkedRequirementId: String?,
     val owner: String,
     val createdAtMs: Long = System.currentTimeMillis(),
-    val updatedAtMs: Long = System.currentTimeMillis()
+    val updatedAtMs: Long = System.currentTimeMillis(),
 )

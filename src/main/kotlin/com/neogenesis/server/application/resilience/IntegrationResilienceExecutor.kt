@@ -13,12 +13,16 @@ class IntegrationResilienceExecutor(
     private val timeoutMs: Long,
     private val failureThreshold: Int,
     private val openStateMs: Long,
-    private val metricsService: OperationalMetricsService
+    private val metricsService: OperationalMetricsService,
 ) {
     private val states = ConcurrentHashMap<String, CircuitState>()
     private val timeoutExecutor = Executors.newCachedThreadPool()
 
-    fun <T> execute(integration: String, operation: String, block: () -> T): T {
+    fun <T> execute(
+        integration: String,
+        operation: String,
+        block: () -> T,
+    ): T {
         if (!enabled) {
             return block()
         }
@@ -29,7 +33,7 @@ class IntegrationResilienceExecutor(
             metricsService.recordCircuitBreakerEvent(integration, "open_reject")
             throw DependencyUnavailableException(
                 code = "integration_circuit_open",
-                message = "Circuit breaker open for integration=$integration"
+                message = "Circuit breaker open for integration=$integration",
             )
         }
 
@@ -45,7 +49,7 @@ class IntegrationResilienceExecutor(
             metricsService.recordIntegrationTimeout(integration, operation)
             throw DependencyUnavailableException(
                 code = "integration_timeout",
-                message = "Timeout budget exceeded for $integration.$operation"
+                message = "Timeout budget exceeded for $integration.$operation",
             )
         } catch (error: Exception) {
             markFailure(state, integration)
@@ -58,7 +62,10 @@ class IntegrationResilienceExecutor(
         timeoutExecutor.shutdownNow()
     }
 
-    private fun markFailure(state: CircuitState, integration: String) {
+    private fun markFailure(
+        state: CircuitState,
+        integration: String,
+    ) {
         val failures = state.failures.incrementAndGet()
         if (failures >= failureThreshold) {
             state.openedUntilMs = System.currentTimeMillis() + openStateMs
@@ -69,6 +76,6 @@ class IntegrationResilienceExecutor(
 
     private class CircuitState(
         val failures: AtomicInteger = AtomicInteger(0),
-        @Volatile var openedUntilMs: Long = 0L
+        @Volatile var openedUntilMs: Long = 0L,
     )
 }

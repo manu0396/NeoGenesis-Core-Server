@@ -8,18 +8,18 @@ import io.grpc.ServerInterceptor
 import io.grpc.Status
 
 class GrpcJwtAuthInterceptor(
-    private val verifier: JWTVerifier
+    private val verifier: JWTVerifier,
 ) : ServerInterceptor {
-
     override fun <ReqT : Any?, RespT : Any?> interceptCall(
         call: ServerCall<ReqT, RespT>,
         headers: Metadata,
-        next: ServerCallHandler<ReqT, RespT>
+        next: ServerCallHandler<ReqT, RespT>,
     ): ServerCall.Listener<ReqT> {
         val rawHeader = headers.get(AUTHORIZATION_HEADER)
-        val token = rawHeader
-            ?.takeIf { it.startsWith("Bearer ", ignoreCase = true) }
-            ?.substringAfter(' ')
+        val token =
+            rawHeader
+                ?.takeIf { it.startsWith("Bearer ", ignoreCase = true) }
+                ?.substringAfter(' ')
 
         if (token.isNullOrBlank()) {
             call.close(Status.UNAUTHENTICATED.withDescription("Missing bearer token"), Metadata())
@@ -29,22 +29,24 @@ class GrpcJwtAuthInterceptor(
         return try {
             val decoded = verifier.verify(token)
             val claim = decoded.getClaim("roles")
-            val roles = claim.asList(String::class.java)
-                ?.map { it.trim() }
-                ?.filter { it.isNotBlank() }
-                ?.toSet()
-                ?: claim.asString()
-                    ?.split(',')
+            val roles =
+                claim.asList(String::class.java)
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
+                    ?.toSet()
+                    ?: claim.asString()
+                        ?.split(',')
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        ?.toSet()
+                        .orEmpty()
+            val scopes =
+                decoded.getClaim("scope").asString()
+                    ?.split(' ')
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
                     ?.toSet()
                     .orEmpty()
-            val scopes = decoded.getClaim("scope").asString()
-                ?.split(' ')
-                ?.map { it.trim() }
-                ?.filter { it.isNotBlank() }
-                ?.toSet()
-                .orEmpty()
             val authzGrants = roles + scopes
 
             if (authzGrants.intersect(REQUIRED_ROLES).isEmpty()) {

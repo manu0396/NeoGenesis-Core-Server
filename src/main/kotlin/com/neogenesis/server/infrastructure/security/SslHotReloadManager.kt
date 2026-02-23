@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 class SslHotReloadManager(
     private val certPath: String?,
     private val keyPath: String?,
-    private val reloadIntervalMinutes: Long
+    private val reloadIntervalMinutes: Long,
 ) : AutoCloseable {
     private val logger = LoggerFactory.getLogger(SslHotReloadManager::class.java)
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
@@ -33,13 +33,14 @@ class SslHotReloadManager(
 
         runCatching {
             keyManager.updateIdentityCredentialsFromFile(certFile, keyFile)
-            reloadTask = keyManager.updateIdentityCredentialsFromFile(
-                certFile,
-                keyFile,
-                reloadIntervalMinutes.coerceAtLeast(1L),
-                TimeUnit.MINUTES,
-                scheduler
-            )
+            reloadTask =
+                keyManager.updateIdentityCredentialsFromFile(
+                    certFile,
+                    keyFile,
+                    reloadIntervalMinutes.coerceAtLeast(1L),
+                    TimeUnit.MINUTES,
+                    scheduler,
+                )
             logger.info("gRPC mTLS certificate hot reload enabled")
         }.onFailure { error ->
             logger.error("Failed to initialize SSL hot reload", error)

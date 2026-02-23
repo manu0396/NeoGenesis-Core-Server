@@ -7,7 +7,7 @@ enum class OutboxEventStatus {
     PENDING,
     PROCESSING,
     PROCESSED,
-    FAILED
+    FAILED,
 }
 
 @Serializable
@@ -22,5 +22,5 @@ data class ServerlessOutboxEvent(
     val processingStartedAtMs: Long?,
     val processedAtMs: Long?,
     val nextAttemptAtMs: Long?,
-    val lastError: String?
+    val lastError: String?,
 )

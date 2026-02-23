@@ -6,42 +6,45 @@ import com.neogenesis.server.domain.model.ServerlessOutboxEvent
 import software.amazon.awssdk.core.exception.SdkClientException
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.sqs.SqsClient
-import software.amazon.awssdk.services.sqs.model.SqsException
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest
+import software.amazon.awssdk.services.sqs.model.SqsException
 import java.net.URI
 
 class AwsSqsOutboxEventPublisher(
     private val queueUrl: String,
     region: String,
-    endpointOverride: String?
+    endpointOverride: String?,
 ) : OutboxEventPublisher, AutoCloseable {
-
-    private val client: SqsClient = SqsClient.builder()
-        .region(Region.of(region))
-        .apply {
-            if (!endpointOverride.isNullOrBlank()) {
-                endpointOverride(URI.create(endpointOverride))
+    private val client: SqsClient =
+        SqsClient.builder()
+            .region(Region.of(region))
+            .apply {
+                if (!endpointOverride.isNullOrBlank()) {
+                    endpointOverride(URI.create(endpointOverride))
+                }
             }
-        }
-        .build()
+            .build()
 
     override fun publish(event: ServerlessOutboxEvent): PublishResult {
         return try {
-            val baseBuilder = SendMessageRequest.builder()
-                .queueUrl(queueUrl)
-                .messageBody(event.payloadJson)
-                .messageAttributes(
-                    mapOf(
-                        "eventType" to software.amazon.awssdk.services.sqs.model.MessageAttributeValue.builder()
-                            .dataType("String")
-                            .stringValue(event.eventType)
-                            .build(),
-                        "partitionKey" to software.amazon.awssdk.services.sqs.model.MessageAttributeValue.builder()
-                            .dataType("String")
-                            .stringValue(event.partitionKey)
-                            .build()
+            val baseBuilder =
+                SendMessageRequest.builder()
+                    .queueUrl(queueUrl)
+                    .messageBody(event.payloadJson)
+                    .messageAttributes(
+                        mapOf(
+                            "eventType" to
+                                software.amazon.awssdk.services.sqs.model.MessageAttributeValue.builder()
+                                    .dataType("String")
+                                    .stringValue(event.eventType)
+                                    .build(),
+                            "partitionKey" to
+                                software.amazon.awssdk.services.sqs.model.MessageAttributeValue.builder()
+                                    .dataType("String")
+                                    .stringValue(event.partitionKey)
+                                    .build(),
+                        ),
                     )
-                )
 
             if (queueUrl.endsWith(".fifo", ignoreCase = true)) {
                 baseBuilder.messageGroupId(event.partitionKey.ifBlank { "default-group" })

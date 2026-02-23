@@ -9,19 +9,43 @@ on:
 jobs:
   build-and-traceability:
     runs-on: ubuntu-latest
+    env:
+      GRADLE_USER_HOME: ~/.gradle
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
           cache: gradle
 
       - name: Grant gradlew execute
         run: chmod +x gradlew
 
-      - name: Run tests + ISO 13485 traceability gate
-        run: ./gradlew clean traceabilityGate
+      - name: Build and quality gates
+        run: ./gradlew clean build --no-daemon
+
+      - name: Ktlint
+        run: ./gradlew ktlintCheck --no-daemon
+
+      - name: Detekt
+        run: ./gradlew detekt --no-daemon
+
+      - name: Test
+        run: ./gradlew test --no-daemon
+
+      - name: Package Shadow JAR
+        run: ./gradlew shadowJar --no-daemon
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-release-artifacts-${{ github.run_id }}
+          path: |
+            build/libs/*-all.jar
+            build/distributions/*.zip
+            build/distributions/*.tar
+          if-no-files-found: error
