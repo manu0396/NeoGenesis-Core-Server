@@ -66,6 +66,7 @@ import com.neogenesis.server.modules.commercial.CommercialRepository
 import com.neogenesis.server.modules.commercial.CommercialService
 import com.neogenesis.server.modules.commercial.commercialModule
 import com.neogenesis.server.modules.connectors.connectorCertificationModule
+import com.neogenesis.server.modules.evidence.evidencePackModule
 import com.neogenesis.server.modules.devicesModule
 import com.neogenesis.server.modules.healthModule
 import com.neogenesis.server.modules.jobsModule
@@ -510,6 +511,16 @@ fun Application.module() {
         if (appConfig.adminApi.enabled) {
             adminApiModule(
                 dataSource = dataSource,
+                auditTrailService = auditTrailService,
+            )
+        }
+        if (appConfig.evidencePack.enabled) {
+            evidencePackModule(
+                jobRepository = jobRepository,
+                telemetryRepository = telemetryRepository,
+                twinMetricsRepository = twinMetricsRepository,
+                auditLogRepository = auditLogRepository,
+                serverVersion = serverVersion,
                 auditTrailService = auditTrailService,
             )
         }
