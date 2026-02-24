@@ -46,3 +46,17 @@ tasks.withType<KotlinCompile>().configureEach {
         jvmTarget = "21"
     }
 }
+
+tasks.register<JavaExec>("certifyConnector") {
+    group = "verification"
+    description = "Run the connector certification harness and emit reports."
+    mainClass.set("com.neogenesis.gateway.certification.ConnectorCertificationHarnessKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    val argsProp = project.findProperty("connectorCertArgs")?.toString().orEmpty()
+    args =
+        if (argsProp.isBlank()) {
+            listOf("--output=build/reports/connector-certification")
+        } else {
+            argsProp.split(" ").filter { it.isNotBlank() }
+        }
+}
