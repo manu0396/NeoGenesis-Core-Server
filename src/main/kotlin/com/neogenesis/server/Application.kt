@@ -4,6 +4,7 @@ import com.neogenesis.server.application.AuditTrailService
 import com.neogenesis.server.application.ControlDecisionService
 import com.neogenesis.server.application.InMemoryTelemetrySnapshotService
 import com.neogenesis.server.application.billing.BillingService
+import com.neogenesis.server.application.regenops.RegenOpsService
 import com.neogenesis.server.application.sre.LatencyBudgetService
 import com.neogenesis.server.application.telemetry.AdvancedBioSimulationService
 import com.neogenesis.server.application.telemetry.ClosedLoopControlService
@@ -18,6 +19,10 @@ import com.neogenesis.server.infrastructure.grpc.BioPrintGrpcService
 import com.neogenesis.server.infrastructure.grpc.GrpcCorrelationTracingInterceptor
 import com.neogenesis.server.infrastructure.grpc.GrpcJwtAuthInterceptor
 import com.neogenesis.server.infrastructure.grpc.GrpcServerFactory
+import com.neogenesis.server.infrastructure.grpc.regenops.RegenGatewayGrpcService
+import com.neogenesis.server.infrastructure.grpc.regenops.RegenMetricsGrpcService
+import com.neogenesis.server.infrastructure.grpc.regenops.RegenProtocolGrpcService
+import com.neogenesis.server.infrastructure.grpc.regenops.RegenRunGrpcService
 import com.neogenesis.server.infrastructure.observability.OpenTelemetrySetup
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
 import com.neogenesis.server.infrastructure.persistence.AuditLogRepository
@@ -32,6 +37,7 @@ import com.neogenesis.server.infrastructure.persistence.JdbcControlCommandStore
 import com.neogenesis.server.infrastructure.persistence.JdbcDigitalTwinStore
 import com.neogenesis.server.infrastructure.persistence.JdbcLatencyBreachStore
 import com.neogenesis.server.infrastructure.persistence.JdbcPrintSessionStore
+import com.neogenesis.server.infrastructure.persistence.JdbcRegenOpsStore
 import com.neogenesis.server.infrastructure.persistence.JdbcRetinalPlanStore
 import com.neogenesis.server.infrastructure.persistence.JdbcTelemetryEventStore
 import com.neogenesis.server.infrastructure.persistence.JobRepository
@@ -358,19 +364,55 @@ fun Application.module() {
                         latencyBudgetService = latencyBudgetService,
                     )
 
+                val jwtAuthInterceptor = GrpcJwtAuthInterceptor(jwtVerifier)
+                val tracingInterceptor = GrpcCorrelationTracingInterceptor(openTelemetry)
+
                 val grpcService = BioPrintGrpcService(telemetryProcessingService)
-                val grpcServiceDefinition =
+                val bioPrintServiceDefinition =
                     ServerInterceptors.intercept(
                         grpcService,
-                        GrpcJwtAuthInterceptor(jwtVerifier),
-                        GrpcCorrelationTracingInterceptor(openTelemetry),
+                        jwtAuthInterceptor,
+                        tracingInterceptor,
+                    )
+
+                val regenOpsService = RegenOpsService(JdbcRegenOpsStore(dataSource))
+                val protocolServiceDefinition =
+                    ServerInterceptors.intercept(
+                        RegenProtocolGrpcService(regenOpsService),
+                        jwtAuthInterceptor,
+                        tracingInterceptor,
+                    )
+                val runServiceDefinition =
+                    ServerInterceptors.intercept(
+                        RegenRunGrpcService(regenOpsService),
+                        jwtAuthInterceptor,
+                        tracingInterceptor,
+                    )
+                val gatewayServiceDefinition =
+                    ServerInterceptors.intercept(
+                        RegenGatewayGrpcService(regenOpsService),
+                        jwtAuthInterceptor,
+                        tracingInterceptor,
+                    )
+                val metricsServiceDefinition =
+                    ServerInterceptors.intercept(
+                        RegenMetricsGrpcService(regenOpsService),
+                        jwtAuthInterceptor,
+                        tracingInterceptor,
                     )
 
                 val runtime =
                     GrpcServerFactory.build(
                         grpcPort = appConfig.grpcPort,
                         tlsConfig = appConfig.security.mtls.grpc,
-                        serviceDefinition = grpcServiceDefinition,
+                        serviceDefinitions =
+                            listOf(
+                                bioPrintServiceDefinition,
+                                protocolServiceDefinition,
+                                runServiceDefinition,
+                                gatewayServiceDefinition,
+                                metricsServiceDefinition,
+                            ),
                     )
                 runtime.server.start()
                 environment.log.info("gRPC server started on port ${appConfig.grpcPort}")

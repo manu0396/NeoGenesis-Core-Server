@@ -19,11 +19,13 @@ object GrpcServerFactory {
     fun build(
         grpcPort: Int,
         tlsConfig: AppConfig.SecurityConfig.MtlsConfig.GrpcMtlsConfig,
-        serviceDefinition: ServerServiceDefinition,
+        serviceDefinitions: List<ServerServiceDefinition>,
     ): GrpcServerRuntime {
         val builder =
             NettyServerBuilder.forPort(grpcPort)
-                .addService(serviceDefinition)
+        serviceDefinitions.forEach { serviceDefinition ->
+            builder.addService(serviceDefinition)
+        }
         var hotReloadManager: SslHotReloadManager? = null
 
         if (tlsConfig.enabled) {
