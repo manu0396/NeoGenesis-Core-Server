@@ -17,6 +17,10 @@ data class AppConfig(
     val control: ControlConfig,
     val serverless: ServerlessConfig,
     val billing: BillingConfig,
+    val commercial: CommercialConfig =
+        CommercialConfig(
+            enabled = false,
+        ),
     val host: String = "0.0.0.0",
     val port: Int = 8080,
     val env: String = "development",
@@ -285,6 +289,10 @@ data class AppConfig(
             val portalReturnUrl: String,
         )
     }
+
+    data class CommercialConfig(
+        val enabled: Boolean,
+    )
 
     companion object {
         fun from(config: ApplicationConfig): AppConfig {
@@ -700,6 +708,13 @@ data class AppConfig(
                 control = controlConfig,
                 serverless = serverlessConfig,
                 billing = billingConfig,
+                commercial =
+                    CommercialConfig(
+                        enabled =
+                            env("COMMERCIAL_MODE")?.equals("true", ignoreCase = true)
+                                ?: config.bool("neogenesis.commercial.mode")
+                                ?: false,
+                    ),
                 host = host,
                 port = port,
                 env = environmentName,
