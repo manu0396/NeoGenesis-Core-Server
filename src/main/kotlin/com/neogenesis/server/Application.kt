@@ -149,6 +149,8 @@ fun Application.module() {
             provider = billingProvider,
         )
     billingService.seedPlans()
+    val auditEventStore = JdbcAuditEventStore(dataSource)
+    val auditTrailService = AuditTrailService(auditEventStore, operationalMetrics)
     val commercialRepository = CommercialRepository(dataSource)
     val commercialService = CommercialService(commercialRepository, auditTrailService)
 
@@ -337,10 +339,7 @@ fun Application.module() {
                 val telemetryEventStore = JdbcTelemetryEventStore(dataSource)
                 val controlCommandStore = JdbcControlCommandStore(dataSource)
                 val digitalTwinStore = JdbcDigitalTwinStore(dataSource)
-                val auditEventStore = JdbcAuditEventStore(dataSource)
                 val latencyBreachStore = JdbcLatencyBreachStore(dataSource)
-
-                val auditTrailService = AuditTrailService(auditEventStore, operationalMetrics)
                 val latencyBudgetService =
                     LatencyBudgetService(
                         thresholdMs = appConfig.control.latencyBudgetMs,

@@ -54,8 +54,18 @@ fun Route.commercialModule(
         }
 
         get("/commercial/accounts") {
-            val tenantId = call.request.queryParameters["tenant_id"] ?: throw ApiException("tenant_required", "tenant_id is required", HttpStatusCode.BadRequest)
-            requireCorrelation(call.request.headers["X-Correlation-Id"], call.request.headers["X-Request-Id"], call.principal())
+            val tenantId =
+                call.request.queryParameters["tenant_id"]
+                    ?: throw ApiException(
+                        "tenant_required",
+                        "tenant_id is required",
+                        HttpStatusCode.BadRequest,
+                    )
+            requireCorrelation(
+                call.request.headers["X-Correlation-Id"],
+                call.request.headers["X-Request-Id"],
+                call.principal(),
+            )
             requireTenantMatch(tenantId, call.principal())
             call.respond(service.listAccounts(tenantId))
         }
@@ -77,8 +87,18 @@ fun Route.commercialModule(
         }
 
         get("/commercial/contacts") {
-            val tenantId = call.request.queryParameters["tenant_id"] ?: throw ApiException("tenant_required", "tenant_id is required", HttpStatusCode.BadRequest)
-            requireCorrelation(call.request.headers["X-Correlation-Id"], call.request.headers["X-Request-Id"], call.principal())
+            val tenantId =
+                call.request.queryParameters["tenant_id"]
+                    ?: throw ApiException(
+                        "tenant_required",
+                        "tenant_id is required",
+                        HttpStatusCode.BadRequest,
+                    )
+            requireCorrelation(
+                call.request.headers["X-Correlation-Id"],
+                call.request.headers["X-Request-Id"],
+                call.principal(),
+            )
             requireTenantMatch(tenantId, call.principal())
             val accountId = call.request.queryParameters["account_id"]?.let(UUID::fromString)
             call.respond(service.listContacts(tenantId, accountId))
@@ -123,8 +143,18 @@ fun Route.commercialModule(
         }
 
         get("/commercial/opportunities") {
-            val tenantId = call.request.queryParameters["tenant_id"] ?: throw ApiException("tenant_required", "tenant_id is required", HttpStatusCode.BadRequest)
-            requireCorrelation(call.request.headers["X-Correlation-Id"], call.request.headers["X-Request-Id"], call.principal())
+            val tenantId =
+                call.request.queryParameters["tenant_id"]
+                    ?: throw ApiException(
+                        "tenant_required",
+                        "tenant_id is required",
+                        HttpStatusCode.BadRequest,
+                    )
+            requireCorrelation(
+                call.request.headers["X-Correlation-Id"],
+                call.request.headers["X-Request-Id"],
+                call.principal(),
+            )
             requireTenantMatch(tenantId, call.principal())
             val stage = call.request.queryParameters["stage"]?.let(OpportunityStage::valueOf)
             call.respond(service.listOpportunities(tenantId, stage))
@@ -161,23 +191,53 @@ fun Route.commercialModule(
         }
 
         get("/commercial/lois") {
-            val tenantId = call.request.queryParameters["tenant_id"] ?: throw ApiException("tenant_required", "tenant_id is required", HttpStatusCode.BadRequest)
-            requireCorrelation(call.request.headers["X-Correlation-Id"], call.request.headers["X-Request-Id"], call.principal())
+            val tenantId =
+                call.request.queryParameters["tenant_id"]
+                    ?: throw ApiException(
+                        "tenant_required",
+                        "tenant_id is required",
+                        HttpStatusCode.BadRequest,
+                    )
+            requireCorrelation(
+                call.request.headers["X-Correlation-Id"],
+                call.request.headers["X-Request-Id"],
+                call.principal(),
+            )
             requireTenantMatch(tenantId, call.principal())
             val opportunityId = call.request.queryParameters["opportunity_id"]?.let(UUID::fromString)
             call.respond(service.listLois(tenantId, opportunityId))
         }
 
         get("/commercial/pipeline/summary") {
-            val tenantId = call.request.queryParameters["tenant_id"] ?: throw ApiException("tenant_required", "tenant_id is required", HttpStatusCode.BadRequest)
-            requireCorrelation(call.request.headers["X-Correlation-Id"], call.request.headers["X-Request-Id"], call.principal())
+            val tenantId =
+                call.request.queryParameters["tenant_id"]
+                    ?: throw ApiException(
+                        "tenant_required",
+                        "tenant_id is required",
+                        HttpStatusCode.BadRequest,
+                    )
+            requireCorrelation(
+                call.request.headers["X-Correlation-Id"],
+                call.request.headers["X-Request-Id"],
+                call.principal(),
+            )
             requireTenantMatch(tenantId, call.principal())
             call.respond(service.pipelineSummary(tenantId))
         }
 
         get("/commercial/pipeline/export") {
-            val tenantId = call.request.queryParameters["tenant_id"] ?: throw ApiException("tenant_required", "tenant_id is required", HttpStatusCode.BadRequest)
-            requireCorrelation(call.request.headers["X-Correlation-Id"], call.request.headers["X-Request-Id"], call.principal())
+            val tenantId =
+                call.request.queryParameters["tenant_id"]
+                    ?: throw ApiException(
+                        "tenant_required",
+                        "tenant_id is required",
+                        HttpStatusCode.BadRequest,
+                    )
+            requireCorrelation(
+                call.request.headers["X-Correlation-Id"],
+                call.request.headers["X-Request-Id"],
+                call.principal(),
+            )
             requireTenantMatch(tenantId, call.principal())
             val rows = service.listOpportunities(tenantId, null)
             val csv = buildCsv(rows)
@@ -186,7 +246,11 @@ fun Route.commercialModule(
     }
 }
 
-private fun requireCommercialHeaders(tenantId: String, correlationId: String, principal: NeoGenesisPrincipal?) {
+private fun requireCommercialHeaders(
+    tenantId: String,
+    correlationId: String,
+    principal: NeoGenesisPrincipal?,
+) {
     if (tenantId.isBlank()) {
         throw ApiException("tenant_required", "tenant_id is required", HttpStatusCode.BadRequest)
     }
@@ -203,7 +267,11 @@ private fun requireCommercialHeaders(tenantId: String, correlationId: String, pr
     }
 }
 
-private fun requireCorrelation(correlation: String?, fallback: String?, principal: NeoGenesisPrincipal?) {
+private fun requireCorrelation(
+    correlation: String?,
+    fallback: String?,
+    principal: NeoGenesisPrincipal?,
+) {
     if (correlation.isNullOrBlank() && fallback.isNullOrBlank()) {
         throw ApiException("correlation_required", "correlation_id is required", HttpStatusCode.BadRequest)
     }

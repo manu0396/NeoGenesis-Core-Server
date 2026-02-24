@@ -12,9 +12,20 @@ class CommercialRepository(
 ) {
     fun createAccount(account: CommercialAccount): CommercialAccount {
         dataSource.connection.use { c ->
-            c.prepareStatement(
-                "INSERT INTO commercial_accounts(id, tenant_id, name, country, industry, website, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-            ).use { s ->
+            val sql =
+                """
+                    INSERT INTO commercial_accounts(
+                        id,
+                        tenant_id,
+                        name,
+                        country,
+                        industry,
+                        website,
+                        created_at,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?)
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setObject(1, account.id)
                 s.setString(2, account.tenantId)
                 s.setString(3, account.name)
@@ -31,9 +42,13 @@ class CommercialRepository(
 
     fun updateAccount(account: CommercialAccount): CommercialAccount {
         dataSource.connection.use { c ->
-            c.prepareStatement(
-                "UPDATE commercial_accounts SET name=?, country=?, industry=?, website=?, updated_at=? WHERE id=? AND tenant_id=?",
-            ).use { s ->
+            val sql =
+                """
+                    UPDATE commercial_accounts
+                    SET name=?, country=?, industry=?, website=?, updated_at=?
+                    WHERE id=? AND tenant_id=?
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setString(1, account.name)
                 s.setString(2, account.country)
                 s.setString(3, account.industry)
@@ -49,9 +64,14 @@ class CommercialRepository(
 
     fun listAccounts(tenantId: String): List<CommercialAccount> {
         return dataSource.connection.use { c ->
-            c.prepareStatement(
-                "SELECT id, tenant_id, name, country, industry, website, created_at, updated_at FROM commercial_accounts WHERE tenant_id=? ORDER BY updated_at DESC",
-            ).use { s ->
+            val sql =
+                """
+                    SELECT id, tenant_id, name, country, industry, website, created_at, updated_at
+                    FROM commercial_accounts
+                    WHERE tenant_id=?
+                    ORDER BY updated_at DESC
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setString(1, tenantId)
                 s.executeQuery().use { rs ->
                     buildList {
@@ -77,9 +97,21 @@ class CommercialRepository(
 
     fun createContact(contact: CommercialContact): CommercialContact {
         dataSource.connection.use { c ->
-            c.prepareStatement(
-                "INSERT INTO commercial_contacts(id, tenant_id, account_id, full_name, email, role, phone, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            ).use { s ->
+            val sql =
+                """
+                    INSERT INTO commercial_contacts(
+                        id,
+                        tenant_id,
+                        account_id,
+                        full_name,
+                        email,
+                        role,
+                        phone,
+                        created_at,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?)
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setObject(1, contact.id)
                 s.setString(2, contact.tenantId)
                 s.setObject(3, contact.accountId)
@@ -95,12 +127,25 @@ class CommercialRepository(
         return contact
     }
 
-    fun listContacts(tenantId: String, accountId: UUID?): List<CommercialContact> {
+    fun listContacts(
+        tenantId: String,
+        accountId: UUID?,
+    ): List<CommercialContact> {
         val sql =
             if (accountId == null) {
-                "SELECT id, tenant_id, account_id, full_name, email, role, phone, created_at, updated_at FROM commercial_contacts WHERE tenant_id=? ORDER BY updated_at DESC"
+                """
+                    SELECT id, tenant_id, account_id, full_name, email, role, phone, created_at, updated_at
+                    FROM commercial_contacts
+                    WHERE tenant_id=?
+                    ORDER BY updated_at DESC
+                """.trimIndent()
             } else {
-                "SELECT id, tenant_id, account_id, full_name, email, role, phone, created_at, updated_at FROM commercial_contacts WHERE tenant_id=? AND account_id=? ORDER BY updated_at DESC"
+                """
+                    SELECT id, tenant_id, account_id, full_name, email, role, phone, created_at, updated_at
+                    FROM commercial_contacts
+                    WHERE tenant_id=? AND account_id=?
+                    ORDER BY updated_at DESC
+                """.trimIndent()
             }
         return dataSource.connection.use { c ->
             c.prepareStatement(sql).use { s ->
@@ -131,9 +176,23 @@ class CommercialRepository(
 
     fun createOpportunity(opportunity: CommercialOpportunity): CommercialOpportunity {
         dataSource.connection.use { c ->
-            c.prepareStatement(
-                "INSERT INTO commercial_opportunities(id, tenant_id, account_id, stage, expected_value_eur, probability, close_date, owner, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            ).use { s ->
+            val sql =
+                """
+                    INSERT INTO commercial_opportunities(
+                        id,
+                        tenant_id,
+                        account_id,
+                        stage,
+                        expected_value_eur,
+                        probability,
+                        close_date,
+                        owner,
+                        notes,
+                        created_at,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setObject(1, opportunity.id)
                 s.setString(2, opportunity.tenantId)
                 s.setObject(3, opportunity.accountId)
@@ -153,9 +212,13 @@ class CommercialRepository(
 
     fun updateOpportunity(opportunity: CommercialOpportunity): CommercialOpportunity {
         dataSource.connection.use { c ->
-            c.prepareStatement(
-                "UPDATE commercial_opportunities SET account_id=?, stage=?, expected_value_eur=?, probability=?, close_date=?, owner=?, notes=?, updated_at=? WHERE id=? AND tenant_id=?",
-            ).use { s ->
+            val sql =
+                """
+                    UPDATE commercial_opportunities
+                    SET account_id=?, stage=?, expected_value_eur=?, probability=?, close_date=?, owner=?, notes=?, updated_at=?
+                    WHERE id=? AND tenant_id=?
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setObject(1, opportunity.accountId)
                 s.setString(2, opportunity.stage.name)
                 s.setLong(3, opportunity.expectedValueEur)
@@ -172,12 +235,27 @@ class CommercialRepository(
         return opportunity
     }
 
-    fun listOpportunities(tenantId: String, stage: OpportunityStage?): List<CommercialOpportunity> {
+    fun listOpportunities(
+        tenantId: String,
+        stage: OpportunityStage?,
+    ): List<CommercialOpportunity> {
         val sql =
             if (stage == null) {
-                "SELECT id, tenant_id, account_id, stage, expected_value_eur, probability, close_date, owner, notes, created_at, updated_at FROM commercial_opportunities WHERE tenant_id=? ORDER BY updated_at DESC"
+                """
+                    SELECT id, tenant_id, account_id, stage, expected_value_eur, probability, close_date, owner, notes,
+                        created_at, updated_at
+                    FROM commercial_opportunities
+                    WHERE tenant_id=?
+                    ORDER BY updated_at DESC
+                """.trimIndent()
             } else {
-                "SELECT id, tenant_id, account_id, stage, expected_value_eur, probability, close_date, owner, notes, created_at, updated_at FROM commercial_opportunities WHERE tenant_id=? AND stage=? ORDER BY updated_at DESC"
+                """
+                    SELECT id, tenant_id, account_id, stage, expected_value_eur, probability, close_date, owner, notes,
+                        created_at, updated_at
+                    FROM commercial_opportunities
+                    WHERE tenant_id=? AND stage=?
+                    ORDER BY updated_at DESC
+                """.trimIndent()
             }
         return dataSource.connection.use { c ->
             c.prepareStatement(sql).use { s ->
@@ -210,9 +288,21 @@ class CommercialRepository(
 
     fun createLoi(loi: CommercialLoi): CommercialLoi {
         dataSource.connection.use { c ->
-            c.prepareStatement(
-                "INSERT INTO commercial_lois(id, tenant_id, opportunity_id, signed_date, amount_range, attachment_ref, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            ).use { s ->
+            val sql =
+                """
+                    INSERT INTO commercial_lois(
+                        id,
+                        tenant_id,
+                        opportunity_id,
+                        signed_date,
+                        amount_range,
+                        attachment_ref,
+                        status,
+                        created_at,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?)
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setObject(1, loi.id)
                 s.setString(2, loi.tenantId)
                 s.setObject(3, loi.opportunityId)
@@ -236,9 +326,13 @@ class CommercialRepository(
         updatedAt: OffsetDateTime,
     ) {
         dataSource.connection.use { c ->
-            c.prepareStatement(
-                "UPDATE commercial_lois SET attachment_ref=?, status=?, updated_at=? WHERE id=? AND tenant_id=?",
-            ).use { s ->
+            val sql =
+                """
+                    UPDATE commercial_lois
+                    SET attachment_ref=?, status=?, updated_at=?
+                    WHERE id=? AND tenant_id=?
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setString(1, attachmentRef)
                 s.setString(2, status)
                 s.setTimestamp(3, Timestamp.from(updatedAt.toInstant()))
@@ -249,12 +343,27 @@ class CommercialRepository(
         }
     }
 
-    fun listLois(tenantId: String, opportunityId: UUID?): List<CommercialLoi> {
+    fun listLois(
+        tenantId: String,
+        opportunityId: UUID?,
+    ): List<CommercialLoi> {
         val sql =
             if (opportunityId == null) {
-                "SELECT id, tenant_id, opportunity_id, signed_date, amount_range, attachment_ref, status, created_at, updated_at FROM commercial_lois WHERE tenant_id=? ORDER BY updated_at DESC"
+                """
+                    SELECT id, tenant_id, opportunity_id, signed_date, amount_range, attachment_ref, status,
+                        created_at, updated_at
+                    FROM commercial_lois
+                    WHERE tenant_id=?
+                    ORDER BY updated_at DESC
+                """.trimIndent()
             } else {
-                "SELECT id, tenant_id, opportunity_id, signed_date, amount_range, attachment_ref, status, created_at, updated_at FROM commercial_lois WHERE tenant_id=? AND opportunity_id=? ORDER BY updated_at DESC"
+                """
+                    SELECT id, tenant_id, opportunity_id, signed_date, amount_range, attachment_ref, status,
+                        created_at, updated_at
+                    FROM commercial_lois
+                    WHERE tenant_id=? AND opportunity_id=?
+                    ORDER BY updated_at DESC
+                """.trimIndent()
             }
         return dataSource.connection.use { c ->
             c.prepareStatement(sql).use { s ->
@@ -285,9 +394,20 @@ class CommercialRepository(
 
     fun logActivity(activity: CommercialActivity) {
         dataSource.connection.use { c ->
-            c.prepareStatement(
-                "INSERT INTO commercial_activity_log(id, tenant_id, actor_id, action, entity_type, entity_id, metadata_json, created_at) VALUES (?,?,?,?,?,?,?,?)",
-            ).use { s ->
+            val sql =
+                """
+                    INSERT INTO commercial_activity_log(
+                        id,
+                        tenant_id,
+                        actor_id,
+                        action,
+                        entity_type,
+                        entity_id,
+                        metadata_json,
+                        created_at
+                    ) VALUES (?,?,?,?,?,?,?,?)
+                """.trimIndent()
+            c.prepareStatement(sql).use { s ->
                 s.setObject(1, activity.id)
                 s.setString(2, activity.tenantId)
                 s.setString(3, activity.actorId)
