@@ -1,0 +1,15 @@
+﻿[Unit]
+Description=NeoGenesis Device Gateway
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/neogenesis/gateway.env
+WorkingDirectory=/opt/neogenesis/gateway
+ExecStart=/opt/neogenesis/gateway/bin/gateway
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
