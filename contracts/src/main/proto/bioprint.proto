@@ -7,6 +7,7 @@ option java_multiple_files = true;
 
 service BioPrintService {
     rpc StreamTelemetryAndControl (stream PrinterTelemetry) returns (stream KinematicCommand);
+    rpc StreamTelemetryAndControlV2 (stream TelemetryStreamRequest) returns (stream TelemetryStreamResponse);
 }
 
 service ProtocolService {
@@ -30,6 +31,8 @@ service RunService {
 service GatewayService {
     rpc RegisterGateway (RegisterGatewayRequest) returns (GatewayRecord);
     rpc Heartbeat (HeartbeatRequest) returns (GatewayRecord);
+    rpc RegisterGatewayV2 (RegisterGatewayRequestV2) returns (GatewayRecord);
+    rpc HeartbeatV2 (HeartbeatRequestV2) returns (GatewayHeartbeatAck);
     rpc PushRunEvents (PushRunEventsRequest) returns (GatewayAck);
     rpc PushTelemetry (PushTelemetryRequest) returns (GatewayAck);
     rpc FetchConfig (FetchConfigRequest) returns (GatewayConfig);
@@ -54,6 +57,9 @@ message PrinterTelemetry {
     float morphological_defect_probability = 10;
     string print_job_id = 11;
     string tissue_type = 12;
+    optional string tenant_id = 13;
+    optional string correlation_id = 14;
+    int64 seq = 15;
 }
 
 message KinematicCommand {
@@ -64,6 +70,76 @@ message KinematicCommand {
     float target_nozzle_temp_celsius = 5;
     float target_pressure_kpa = 6;
     bool emergency_stop_latched = 7;
+    optional string tenant_id = 8;
+    optional string correlation_id = 9;
+    int64 seq = 10;
+    int64 issued_at_ms = 11;
+}
+
+message StreamResume {
+    int64 since_seq = 1;
+    int64 since_ms = 2;
+    string reason = 3;
+}
+
+message StreamAck {
+    int64 last_seq = 1;
+    int64 server_time_ms = 2;
+}
+
+message TelemetryStreamRequest {
+    oneof payload {
+        StreamResume resume = 1;
+        PrinterTelemetry telemetry = 2;
+    }
+    optional string tenant_id = 3;
+    optional string correlation_id = 4;
+}
+
+message TelemetryStreamResponse {
+    oneof payload {
+        KinematicCommand command = 1;
+        StreamAck ack = 2;
+    }
+    optional string tenant_id = 3;
+    optional string correlation_id = 4;
+}
+
+message GatewayAuth {
+    string auth_token = 1;
+    bytes signature = 2;
+    string signature_alg = 3;
+    string nonce = 4;
+    int64 issued_at_ms = 5;
+    string certificate_serial = 6;
+}
+
+message RegisterGatewayRequestV2 {
+    string tenant_id = 1;
+    string gateway_id = 2;
+    string display_name = 3;
+    string certificate_serial = 4;
+    string actor_id = 5;
+    GatewayAuth auth = 6;
+    optional string correlation_id = 7;
+}
+
+message HeartbeatRequestV2 {
+    string tenant_id = 1;
+    string gateway_id = 2;
+    string certificate_serial = 3;
+    GatewayAuth auth = 4;
+    int64 observed_at_ms = 5;
+    optional string correlation_id = 6;
+}
+
+message GatewayHeartbeatAck {
+    string tenant_id = 1;
+    string gateway_id = 2;
+    string status = 3;
+    int64 server_time_ms = 4;
+    int64 next_heartbeat_after_ms = 5;
+    optional string correlation_id = 6;
 }
 
 message CreateDraftRequest {
@@ -72,6 +148,7 @@ message CreateDraftRequest {
     string title = 3;
     string content_json = 4;
     string actor_id = 5;
+    optional string correlation_id = 6;
 }
 
 message UpdateDraftRequest {
@@ -80,6 +157,7 @@ message UpdateDraftRequest {
     string title = 3;
     string content_json = 4;
     string actor_id = 5;
+    optional string correlation_id = 6;
 }
 
 message PublishVersionRequest {
@@ -87,17 +165,20 @@ message PublishVersionRequest {
     string protocol_id = 2;
     string actor_id = 3;
     string changelog = 4;
+    optional string correlation_id = 5;
 }
 
 message ListProtocolsRequest {
     string tenant_id = 1;
     int32 limit = 2;
+    optional string correlation_id = 3;
 }
 
 message GetProtocolVersionRequest {
     string tenant_id = 1;
     string protocol_id = 2;
     int32 version = 3;
+    optional string correlation_id = 4;
 }
 
 message DiffVersionsRequest {
@@ -105,6 +186,7 @@ message DiffVersionsRequest {
     string protocol_id = 2;
     int32 base_version = 3;
     int32 target_version = 4;
+    optional string correlation_id = 5;
 }
 
 message ProtocolDraftRecord {
@@ -115,6 +197,7 @@ message ProtocolDraftRecord {
     string updated_by = 5;
     int64 created_at_ms = 6;
     int64 updated_at_ms = 7;
+    optional string correlation_id = 8;
 }
 
 message ProtocolVersionRecord {
@@ -126,6 +209,7 @@ message ProtocolVersionRecord {
     string published_by = 6;
     string changelog = 7;
     int64 created_at_ms = 8;
+    optional string correlation_id = 9;
 }
 
 message ProtocolSummary {
@@ -135,16 +219,21 @@ message ProtocolSummary {
     int32 latest_version = 4;
     bool has_draft = 5;
     int64 updated_at_ms = 6;
+    optional string correlation_id = 7;
 }
 
 message ListProtocolsResponse {
     repeated ProtocolSummary protocols = 1;
+    optional string tenant_id = 2;
+    optional string correlation_id = 3;
 }
 
 message DiffVersionsResponse {
     string summary = 1;
     repeated string added_lines = 2;
     repeated string removed_lines = 3;
+    optional string tenant_id = 4;
+    optional string correlation_id = 5;
 }
 
 message StartRunRequest {
@@ -154,6 +243,7 @@ message StartRunRequest {
     string run_id = 4;
     string gateway_id = 5;
     string actor_id = 6;
+    optional string correlation_id = 7;
 }
 
 message RunControlRequest {
@@ -161,11 +251,13 @@ message RunControlRequest {
     string run_id = 2;
     string actor_id = 3;
     string reason = 4;
+    optional string correlation_id = 5;
 }
 
 message GetRunRequest {
     string tenant_id = 1;
     string run_id = 2;
+    optional string correlation_id = 3;
 }
 
 message StreamRunEventsRequest {
@@ -174,6 +266,8 @@ message StreamRunEventsRequest {
     int64 since_ms = 3;
     int32 limit = 4;
     int64 since_seq = 5;
+    optional string correlation_id = 6;
+    optional string resume_token = 7;
 }
 
 message StreamTelemetryRequest {
@@ -182,6 +276,8 @@ message StreamTelemetryRequest {
     int64 since_ms = 3;
     int32 limit = 4;
     int64 since_seq = 5;
+    optional string correlation_id = 6;
+    optional string resume_token = 7;
 }
 
 message RunRecord {
@@ -197,6 +293,7 @@ message RunRecord {
     int64 paused_at_ms = 10;
     int64 aborted_at_ms = 11;
     string abort_reason = 12;
+    optional string correlation_id = 13;
 }
 
 message RunEventRecord {
@@ -207,6 +304,7 @@ message RunEventRecord {
     string payload_json = 5;
     int64 created_at_ms = 6;
     int64 seq = 7;
+    optional string correlation_id = 8;
 }
 
 message TelemetryRecord {
@@ -219,6 +317,7 @@ message TelemetryRecord {
     double drift_score = 7;
     int64 recorded_at_ms = 8;
     int64 seq = 9;
+    optional string correlation_id = 10;
 }
 
 message RegisterGatewayRequest {
@@ -227,12 +326,14 @@ message RegisterGatewayRequest {
     string display_name = 3;
     string certificate_serial = 4;
     string actor_id = 5;
+    optional string correlation_id = 6;
 }
 
 message HeartbeatRequest {
     string tenant_id = 1;
     string gateway_id = 2;
     string certificate_serial = 3;
+    optional string correlation_id = 4;
 }
 
 message GatewayRecord {
@@ -243,6 +344,7 @@ message GatewayRecord {
     string status = 5;
     int64 last_heartbeat_at_ms = 6;
     int64 updated_at_ms = 7;
+    optional string correlation_id = 8;
 }
 
 message GatewayRunEvent {
@@ -250,12 +352,16 @@ message GatewayRunEvent {
     string event_type = 2;
     string payload_json = 3;
     int64 created_at_ms = 4;
+    optional string tenant_id = 5;
+    optional string correlation_id = 6;
+    int64 seq = 7;
 }
 
 message PushRunEventsRequest {
     string tenant_id = 1;
     string gateway_id = 2;
     repeated GatewayRunEvent events = 3;
+    optional string correlation_id = 4;
 }
 
 message GatewayTelemetry {
@@ -265,23 +371,31 @@ message GatewayTelemetry {
     string unit = 4;
     double drift_score = 5;
     int64 recorded_at_ms = 6;
+    optional string tenant_id = 7;
+    optional string correlation_id = 8;
+    int64 seq = 9;
 }
 
 message PushTelemetryRequest {
     string tenant_id = 1;
     string gateway_id = 2;
     repeated GatewayTelemetry telemetry = 3;
+    optional string correlation_id = 4;
 }
 
 message GatewayAck {
     int32 accepted = 1;
     int32 rejected = 2;
     string message = 3;
+    optional string tenant_id = 4;
+    optional string correlation_id = 5;
+    int64 last_seq = 6;
 }
 
 message FetchConfigRequest {
     string tenant_id = 1;
     string gateway_id = 2;
+    optional string correlation_id = 3;
 }
 
 message GatewayConfig {
@@ -292,11 +406,13 @@ message GatewayConfig {
     string protocol_content_json = 5;
     int64 issued_at_ms = 6;
     bool empty = 7;
+    optional string correlation_id = 8;
 }
 
 message GetReproducibilityScoreRequest {
     string tenant_id = 1;
     string run_id = 2;
+    optional string correlation_id = 3;
 }
 
 message ReproducibilityScoreResponse {
@@ -306,12 +422,14 @@ message ReproducibilityScoreResponse {
     int32 event_count = 4;
     int32 telemetry_count = 5;
     int32 drift_alert_count = 6;
+    optional string correlation_id = 7;
 }
 
 message ListDriftAlertsRequest {
     string tenant_id = 1;
     string run_id = 2;
     int32 limit = 3;
+    optional string correlation_id = 4;
 }
 
 message DriftAlertRecord {
@@ -322,15 +440,19 @@ message DriftAlertRecord {
     double metric_value = 5;
     double threshold = 6;
     int64 created_at_ms = 7;
+    optional string correlation_id = 8;
 }
 
 message ListDriftAlertsResponse {
     repeated DriftAlertRecord alerts = 1;
+    optional string tenant_id = 2;
+    optional string correlation_id = 3;
 }
 
 message ExportRunReportRequest {
     string tenant_id = 1;
     string run_id = 2;
+    optional string correlation_id = 3;
 }
 
 message RunReportResponse {
@@ -344,4 +466,5 @@ message RunReportResponse {
     string telemetry_json = 8;
     bool evidence_chain_valid = 9;
     int64 generated_at_ms = 10;
+    optional string correlation_id = 11;
 }
