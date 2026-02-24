@@ -11,7 +11,7 @@ and emits a JSON + Markdown report.
 Optional args:
 ```bash
 ./gradlew :gateway:certifyConnector \
-  -PconnectorCertArgs="--events=500 --dropRate=0.01 --reconnectAt=250 --output=build/reports/connector-certification"
+  -PconnectorCertArgs="--driver=example-driver --events=500 --dropRate=0.01 --reconnectAt=250 --output=build/reports/connector-certification"
 ```
 
 Output:
@@ -48,3 +48,13 @@ Response (example):
 Notes:
 - Admin/Founder role required.
 - An audit event is recorded.
+
+## Optional submission to server
+If you want the harness to POST to the server endpoint, set:
+```
+CERTIFICATION_SERVER_URL=http://localhost:8080/admin/connectors/certify
+CERTIFICATION_TENANT_ID=tenant-1
+CERTIFICATION_CORRELATION_ID=<optional>
+CERTIFICATION_CONNECTOR_VERSION=1.0.0
+CERTIFICATION_AUTH_TOKEN=<jwt>
+```
