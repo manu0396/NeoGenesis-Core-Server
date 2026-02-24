@@ -5,8 +5,6 @@ import com.neogenesis.gateway.queue.QueueItemType
 import com.neogenesis.grpc.GatewayRunEvent
 import com.neogenesis.grpc.GatewayTelemetry
 import com.google.protobuf.util.JsonFormat
-import com.neogenesis.grpc.GatewayRunEventKt
-import com.neogenesis.grpc.GatewayTelemetryKt
 
 object QueueSerializer {
     fun serializeTelemetry(telemetry: GatewayTelemetry): String {
