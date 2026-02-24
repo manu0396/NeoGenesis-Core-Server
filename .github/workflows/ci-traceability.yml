@@ -25,17 +25,14 @@ jobs:
       - name: Grant gradlew execute
         run: chmod +x gradlew
 
-      - name: Build and quality gates
-        run: ./gradlew clean build --no-daemon
+      - name: Build (server + gateway)
+        run: ./gradlew clean build :gateway:build --no-daemon
 
-      - name: Ktlint
-        run: ./gradlew ktlintCheck --no-daemon
+      - name: Contracts freshness
+        run: ./gradlew checkContracts --no-daemon
 
-      - name: Detekt
-        run: ./gradlew detekt --no-daemon
-
-      - name: Test
-        run: ./gradlew test --no-daemon
+      - name: Publish contracts (mavenLocal)
+        run: ./gradlew publishContractsPublicationToMavenLocal --no-daemon
 
       - name: Package Shadow JAR
         run: ./gradlew shadowJar --no-daemon
