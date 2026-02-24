@@ -25,6 +25,10 @@ data class AppConfig(
         ConnectorCertificationConfig(
             enabled = false,
         ),
+    val adminWeb: AdminWebConfig =
+        AdminWebConfig(
+            enabled = false,
+        ),
     val host: String = "0.0.0.0",
     val port: Int = 8080,
     val env: String = "development",
@@ -95,6 +99,10 @@ data class AppConfig(
     )
 
     data class ConnectorCertificationConfig(
+        val enabled: Boolean,
+    )
+
+    data class AdminWebConfig(
         val enabled: Boolean,
     )
 
@@ -728,6 +736,13 @@ data class AppConfig(
                         enabled =
                             env("CONNECTOR_CERTIFICATION_MODE")?.equals("true", ignoreCase = true)
                                 ?: config.bool("neogenesis.connector.certification.mode")
+                                ?: false,
+                    ),
+                adminWeb =
+                    AdminWebConfig(
+                        enabled =
+                            env("ADMIN_WEB_MODE")?.equals("true", ignoreCase = true)
+                                ?: config.bool("neogenesis.admin.web.mode")
                                 ?: false,
                     ),
                 host = host,

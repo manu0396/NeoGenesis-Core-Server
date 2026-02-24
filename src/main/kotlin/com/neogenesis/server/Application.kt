@@ -58,6 +58,7 @@ import com.neogenesis.server.modules.InMemoryMetrics
 import com.neogenesis.server.modules.PasswordService
 import com.neogenesis.server.modules.auditModule
 import com.neogenesis.server.modules.authModule
+import com.neogenesis.server.modules.admin.adminWebModule
 import com.neogenesis.server.modules.billingModule
 import com.neogenesis.server.modules.bioinkModule
 import com.neogenesis.server.modules.commercial.CommercialRepository
@@ -495,6 +496,11 @@ fun Application.module() {
         }
         if (appConfig.connectorCertification.enabled) {
             connectorCertificationModule(
+                auditTrailService = auditTrailService,
+            )
+        }
+        if (appConfig.adminWeb.enabled) {
+            adminWebModule(
                 auditTrailService = auditTrailService,
             )
         }
