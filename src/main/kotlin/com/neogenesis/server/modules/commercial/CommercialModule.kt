@@ -17,9 +17,7 @@ import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.util.UUID
 
-fun Route.commercialModule(
-    service: CommercialService,
-) {
+fun Route.commercialModule(service: CommercialService) {
     authenticate("auth-jwt") {
         post("/commercial/accounts") {
             val request = call.receive<CreateAccountRequest>()
@@ -284,7 +282,10 @@ private fun requireCorrelation(
     }
 }
 
-private fun requireTenantMatch(tenantId: String, principal: NeoGenesisPrincipal?) {
+private fun requireTenantMatch(
+    tenantId: String,
+    principal: NeoGenesisPrincipal?,
+) {
     val principalTenant = principal?.tenantId
     if (!principalTenant.isNullOrBlank() && principalTenant != tenantId) {
         throw ApiException("tenant_mismatch", "tenant mismatch", HttpStatusCode.Forbidden)
@@ -293,18 +294,19 @@ private fun requireTenantMatch(tenantId: String, principal: NeoGenesisPrincipal?
 
 private fun buildCsv(opportunities: List<CommercialOpportunity>): String {
     val header = "opportunity_id,account_id,stage,expected_value_eur,probability,close_date,owner,notes"
-    val rows = opportunities.map {
-        listOf(
-            it.id,
-            it.accountId,
-            it.stage.name,
-            it.expectedValueEur,
-            it.probability,
-            it.closeDate ?: "",
-            it.owner,
-            it.notes ?: "",
-        ).joinToString(",")
-    }
+    val rows =
+        opportunities.map {
+            listOf(
+                it.id,
+                it.accountId,
+                it.stage.name,
+                it.expectedValueEur,
+                it.probability,
+                it.closeDate ?: "",
+                it.owner,
+                it.notes ?: "",
+            ).joinToString(",")
+        }
     return (listOf(header) + rows).joinToString("\n")
 }
 
