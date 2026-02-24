@@ -55,6 +55,43 @@ class EvidencePackModuleTest {
             assertEquals(HttpStatusCode.OK, ok.status)
         }
 
+    @Test
+    fun `audit bundle requires correlation and tenant`() =
+        testApplication {
+            environment {
+                config = testConfig()
+            }
+            application {
+                module()
+            }
+
+            val token = loginAndGetToken()
+            client.post("/devices") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                contentType(ContentType.Application.Json)
+                setBody("""{"id":"dev-e2","name":"Device 2","tenantId":"tenant-a"}""")
+            }
+            client.post("/jobs") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                contentType(ContentType.Application.Json)
+                setBody("""{"id":"job-e2","deviceId":"dev-e2","tenantId":"tenant-a"}""")
+            }
+
+            val missingTenant =
+                client.get("/audit-bundle/job/job-e2.zip") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                    header("X-Correlation-Id", "corr-2")
+                }
+            assertEquals(HttpStatusCode.BadRequest, missingTenant.status)
+
+            val ok =
+                client.get("/audit-bundle/job/job-e2.zip?tenant_id=tenant-a") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                    header("X-Correlation-Id", "corr-2")
+                }
+            assertEquals(HttpStatusCode.OK, ok.status)
+        }
+
     private suspend fun io.ktor.server.testing.ApplicationTestBuilder.loginAndGetToken(): String {
         val response =
             client.post("/auth/login") {
@@ -84,6 +121,7 @@ class EvidencePackModuleTest {
             "neogenesis.adminBootstrap.user" to "admin",
             "neogenesis.adminBootstrap.password" to "admin-password",
             "neogenesis.evidence.pack.mode" to "true",
+            "neogenesis.audit.bundle.mode" to "true",
         )
     }
 }
