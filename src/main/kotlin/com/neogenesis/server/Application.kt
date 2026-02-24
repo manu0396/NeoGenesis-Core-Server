@@ -195,6 +195,7 @@ fun Application.module() {
                 MDC.put("service", appConfig.observability.serviceName)
                 MDC.put("version", serverVersion)
                 MDC.put("traceId", call.callId ?: "missing-trace-id")
+                MDC.put("correlationId", call.callId ?: "missing-correlation-id")
                 MDC.put("endpoint", "${call.request.httpMethod.value} ${call.request.path()}")
             }
             onCallRespond { call, _ ->
@@ -202,6 +203,7 @@ fun Application.module() {
                 val principal = call.principal<NeoGenesisPrincipal>()
                 if (principal != null) {
                     MDC.put("userId", principal.subject)
+                    principal.tenantId?.let { MDC.put("tenantId", it) }
                 }
                 MDC.put("status", call.response.status()?.value?.toString() ?: "200")
                 MDC.put("durationMs", elapsed.toString())

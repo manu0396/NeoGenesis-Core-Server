@@ -10,6 +10,7 @@ val grpcKotlinVersion = "1.4.1"
 val protobufVersion = "3.25.5"
 val coroutinesVersion = "1.8.1"
 val logbackVersion = "1.4.14"
+val logstashLogbackVersion = "7.4"
 
 application {
     mainClass.set("com.neogenesis.gateway.GatewayMainKt")
@@ -35,6 +36,7 @@ dependencies {
     implementation("com.google.protobuf:protobuf-java-util:$protobufVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
+    implementation("net.logstash.logback:logstash-logback-encoder:$logstashLogbackVersion")
 
     testImplementation(kotlin("test"))
 }
