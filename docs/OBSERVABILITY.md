@@ -1,4 +1,4 @@
-Observability
+﻿Observability
 
 Health
 - `GET /health/live` - liveness
@@ -7,6 +7,15 @@ Health
 
 Metrics
 - `GET /metrics` (Prometheus format)
+
+Tracing / OTEL
+- Set `OTEL_EXPORTER_OTLP_ENDPOINT` to your collector (e.g. `http://otel-collector:4317`).
+- Set `OTEL_SERVICE_NAME` (e.g. `neogenesis-core-server`).
+- Optional: `OTEL_RESOURCE_ATTRIBUTES=service.version=1.0.1,env=local`.
+
+Logging
+- Server supports JSON logs when `LOG_FORMAT=json`.
+- Gateway logs are stdout; use systemd journald or a log shipper.
 
 Correlation
 - Incoming requests accept `X-Correlation-Id` or `X-Request-Id`.
