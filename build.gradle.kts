@@ -27,11 +27,11 @@ plugins {
 }
 
 group = "com.neogenesis"
-version = "1.0.1"
+version = "1.0.0"
 
 allprojects {
     group = "com.neogenesis"
-    version = "1.0.1"
+    version = "1.0.0"
     repositories {
         mavenCentral()
     }
