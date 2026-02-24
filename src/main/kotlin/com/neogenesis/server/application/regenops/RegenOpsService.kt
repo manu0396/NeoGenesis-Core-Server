@@ -2,10 +2,10 @@
 
 import com.neogenesis.server.application.error.BadRequestException
 import com.neogenesis.server.application.error.ConflictException
-import kotlin.math.max
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.math.max
 
 class RegenOpsService(
     private val store: RegenOpsStore,
@@ -299,9 +299,10 @@ class RegenOpsService(
         certificateSerial: String,
     ): RegenGateway {
         val normalizedTenant = normalizeTenant(tenantId)
-        val normalizedGateway = gatewayId.trim().ifBlank {
-            throw BadRequestException(code = "gateway_id_required", message = "gatewayId is required")
-        }
+        val normalizedGateway =
+            gatewayId.trim().ifBlank {
+                throw BadRequestException(code = "gateway_id_required", message = "gatewayId is required")
+            }
         return store.upsertGateway(
             tenantId = normalizedTenant,
             gatewayId = normalizedGateway,

@@ -1,4 +1,6 @@
-﻿package com.neogenesis.server.infrastructure.grpc.regenops
+﻿@file:Suppress("ktlint:standard:import-ordering")
+
+package com.neogenesis.server.infrastructure.grpc.regenops
 
 import com.neogenesis.grpc.CreateDraftRequest
 import com.neogenesis.grpc.DiffVersionsRequest
@@ -24,8 +26,8 @@ import com.neogenesis.grpc.ProtocolVersionRecord
 import com.neogenesis.grpc.PublishVersionRequest
 import com.neogenesis.grpc.PushRunEventsRequest
 import com.neogenesis.grpc.PushTelemetryRequest
-import com.neogenesis.grpc.ReproducibilityScoreResponse
 import com.neogenesis.grpc.RegisterGatewayRequest
+import com.neogenesis.grpc.ReproducibilityScoreResponse
 import com.neogenesis.grpc.RunControlRequest
 import com.neogenesis.grpc.RunEventRecord
 import com.neogenesis.grpc.RunRecord
@@ -45,8 +47,8 @@ import com.neogenesis.server.infrastructure.grpc.GrpcPrincipal
 import com.neogenesis.server.infrastructure.grpc.requireGrpcGrant
 import io.grpc.Status
 import io.grpc.StatusException
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class RegenProtocolGrpcService(

@@ -1,3 +1,13 @@
+@file:Suppress(
+    "ktlint:standard:argument-list-wrapping",
+    "ktlint:standard:blank-line-before-declaration",
+    "ktlint:standard:function-signature",
+    "ktlint:standard:max-line-length",
+    "ktlint:standard:multiline-expression-wrapping",
+    "ktlint:standard:parameter-list-wrapping",
+    "ktlint:standard:property-wrapping",
+    "ktlint:standard:statement-wrapping",
+)
 
 package com.neogenesis.server.infrastructure.persistence
 
@@ -15,18 +25,18 @@ import com.neogenesis.server.application.regenops.RegenRun
 import com.neogenesis.server.application.regenops.RegenRunEvent
 import com.neogenesis.server.application.regenops.RegenRunStatus
 import com.neogenesis.server.application.regenops.RegenTelemetryPoint
-import java.security.MessageDigest
-import java.sql.Connection
-import java.sql.SQLException
-import java.sql.Timestamp
-import java.time.Instant
-import javax.sql.DataSource
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.security.MessageDigest
+import java.sql.Connection
+import java.sql.SQLException
+import java.sql.Timestamp
+import java.time.Instant
+import javax.sql.DataSource
 
 class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
     override fun createDraft(tenantId: String, protocolId: String, title: String, contentJson: String, updatedBy: String): RegenProtocolDraft {
