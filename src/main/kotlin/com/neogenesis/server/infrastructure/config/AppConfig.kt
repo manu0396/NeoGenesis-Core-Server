@@ -108,6 +108,10 @@ data class AppConfig(
 
     data class AdminWebConfig(
         val enabled: Boolean,
+        val oidcAuthUrl: String? = null,
+        val oidcClientId: String? = null,
+        val oidcRedirectUri: String? = null,
+        val oidcScope: String? = null,
     )
 
     data class AdminApiConfig(
@@ -752,6 +756,18 @@ data class AppConfig(
                             env("ADMIN_WEB_MODE")?.equals("true", ignoreCase = true)
                                 ?: config.bool("neogenesis.admin.web.mode")
                                 ?: false,
+                        oidcAuthUrl =
+                            env("ADMIN_WEB_OIDC_AUTH_URL")
+                                ?: config.string("neogenesis.admin.web.oidc.authUrl"),
+                        oidcClientId =
+                            env("ADMIN_WEB_OIDC_CLIENT_ID")
+                                ?: config.string("neogenesis.admin.web.oidc.clientId"),
+                        oidcRedirectUri =
+                            env("ADMIN_WEB_OIDC_REDIRECT_URI")
+                                ?: config.string("neogenesis.admin.web.oidc.redirectUri"),
+                        oidcScope =
+                            env("ADMIN_WEB_OIDC_SCOPE")
+                                ?: config.string("neogenesis.admin.web.oidc.scope"),
                     ),
                 adminApi =
                     AdminApiConfig(
