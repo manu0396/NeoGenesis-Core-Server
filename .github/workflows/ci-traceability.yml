@@ -34,6 +34,12 @@ jobs:
       - name: Publish contracts (mavenLocal)
         run: ./gradlew publishContractsPublicationToMavenLocal --no-daemon
 
+      - name: Docker build (server)
+        run: docker build -t neogenesis-core-server:ci .
+
+      - name: Docker build (gateway)
+        run: docker build -t neogenesis-gateway:ci -f gateway/Dockerfile .
+
       - name: Package Shadow JAR
         run: ./gradlew shadowJar --no-daemon
 
