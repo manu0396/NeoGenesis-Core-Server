@@ -8,6 +8,7 @@ import java.time.Instant
 
 @Serializable
 data class EvidenceRunReport(
+    val schemaVersion: String,
     val jobId: String,
     val tenantId: String,
     val actorId: String,
@@ -23,6 +24,7 @@ data class EvidenceRunReport(
     fun toCsv(): String {
         val header =
             listOf(
+                "schema_version",
                 "job_id",
                 "tenant_id",
                 "actor_id",
@@ -37,6 +39,7 @@ data class EvidenceRunReport(
             )
         val row =
             listOf(
+                schemaVersion,
                 jobId,
                 tenantId,
                 actorId,
@@ -67,6 +70,7 @@ data class EvidenceRunReport(
             val twin = twinMetricsRepository.listByJob(jobId, null, null, 5_000)
             val audit = auditLogRepository.listByJob(jobId, 10_000)
             return EvidenceRunReport(
+                schemaVersion = "1",
                 jobId = jobId,
                 tenantId = tenantId,
                 actorId = actorId,

@@ -76,6 +76,7 @@ import com.neogenesis.server.modules.healthModule
 import com.neogenesis.server.modules.jobsModule
 import com.neogenesis.server.modules.shouldBootstrapAdmin
 import com.neogenesis.server.modules.telemetryModule
+import com.neogenesis.server.modules.trace.traceMetricsModule
 import io.grpc.ServerInterceptors
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -495,6 +496,11 @@ fun Application.module() {
             auditLogRepository = auditLogRepository,
             metrics = metrics,
             maxPayloadBytes = appConfig.rateLimits.maxRequestBodyBytes,
+        )
+        traceMetricsModule(
+            dataSource = dataSource,
+            regenOpsService = regenOpsService,
+            regenOpsStore = regenOpsStore,
         )
         auditModule(
             jobRepository = jobRepository,
