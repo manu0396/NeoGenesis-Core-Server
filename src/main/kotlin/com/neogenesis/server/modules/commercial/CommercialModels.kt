@@ -15,7 +15,10 @@ object UuidSerializer : KSerializer<UUID> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: UUID) {
+    override fun serialize(
+        encoder: Encoder,
+        value: UUID,
+    ) {
         encoder.encodeString(value.toString())
     }
 
@@ -26,7 +29,10 @@ object LocalDateSerializer : KSerializer<LocalDate> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("LocalDate", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: LocalDate) {
+    override fun serialize(
+        encoder: Encoder,
+        value: LocalDate,
+    ) {
         encoder.encodeString(value.toString())
     }
 
@@ -37,7 +43,10 @@ object OffsetDateTimeSerializer : KSerializer<OffsetDateTime> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("OffsetDateTime", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: OffsetDateTime) {
+    override fun serialize(
+        encoder: Encoder,
+        value: OffsetDateTime,
+    ) {
         encoder.encodeString(value.toString())
     }
 

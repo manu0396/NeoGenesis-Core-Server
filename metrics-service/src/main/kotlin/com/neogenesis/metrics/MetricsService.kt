@@ -43,7 +43,7 @@ fun main() {
     server.start(wait = true)
 }
 
-fun Application.metricsModule(
+private fun Application.metricsModule(
     config: MetricsConfig,
     store: MetricsStore,
 ) {
@@ -68,7 +68,7 @@ fun Application.metricsModule(
         }
 
         get("/metrics/score") {
-            val context = requireContext()
+            val context = call.requireContext()
             recordAuditEvent("metrics.score.read", context)
             call.respond(
                 MetricsScoreResponse(
@@ -81,7 +81,7 @@ fun Application.metricsModule(
         }
 
         get("/metrics/alerts") {
-            val context = requireContext()
+            val context = call.requireContext()
             recordAuditEvent("metrics.alerts.read", context)
             val filters =
                 AlertsQuery(
@@ -96,7 +96,7 @@ fun Application.metricsModule(
         }
 
         post("/metrics/ingest") {
-            val context = requireContext()
+            val context = call.requireContext()
             val payload = call.receive<MetricsIngestRequest>()
             val sample =
                 MetricSample(
@@ -125,7 +125,7 @@ fun Application.metricsModule(
         }
 
         get("/metrics/baselines") {
-            val context = requireContext()
+            val context = call.requireContext()
             recordAuditEvent("metrics.baselines.list", context)
             val response =
                 store.listBaselines(
@@ -138,7 +138,7 @@ fun Application.metricsModule(
         }
 
         post("/metrics/baselines") {
-            val context = requireContext()
+            val context = call.requireContext()
             val request = call.receive<MetricsBaselineUpsertRequest>()
             val baseline =
                 store.upsertBaseline(
@@ -160,13 +160,13 @@ fun Application.metricsModule(
         }
 
         get("/metrics/rules") {
-            val context = requireContext()
+            val context = call.requireContext()
             recordAuditEvent("metrics.rules.list", context)
             call.respond(MetricsRulesResponse(rules = store.listRules(context.tenantId)))
         }
 
         post("/metrics/rules") {
-            val context = requireContext()
+            val context = call.requireContext()
             val request = call.receive<MetricsRuleUpsertRequest>()
             val rule =
                 store.upsertRule(
@@ -192,7 +192,7 @@ fun Application.metricsModule(
         }
 
         get("/metrics/reports/run/{runId}") {
-            val context = requireContext()
+            val context = call.requireContext()
             val runId = call.parameters["runId"]?.trim().orEmpty()
             if (runId.isBlank()) {
                 throw MetricsApiException("invalid_request", "runId is required")
@@ -202,7 +202,7 @@ fun Application.metricsModule(
         }
 
         get("/metrics/reports/weekly") {
-            val context = requireContext()
+            val context = call.requireContext()
             val weekStart = call.request.queryParameters["weekStart"]?.trim().orEmpty()
             if (weekStart.isBlank()) {
                 throw MetricsApiException("invalid_request", "weekStart is required (YYYY-MM-DD)")

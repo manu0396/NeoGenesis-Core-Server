@@ -81,7 +81,11 @@ fun Route.simulatorModule(
                 }
             }.getOrElse { error ->
                 if (error is BadRequestException) {
-                    throw ApiException(error.code, error.message, HttpStatusCode.BadRequest)
+                    throw ApiException(
+                        error.code,
+                        error.message ?: "Bad request",
+                        HttpStatusCode.BadRequest,
+                    )
                 }
                 throw error
             }
@@ -153,7 +157,22 @@ fun Route.simulatorModule(
             val sinceSeq = call.request.queryParameters["sinceSeq"]?.toLongOrNull() ?: 0L
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 250
             val events = regenOpsStore.listRunEvents(tenantId, runId, sinceMs, sinceSeq, limit)
-            call.respond(SimulatorEventsResponse(events = events))
+            call.respond(
+                SimulatorEventsResponse(
+                    events =
+                        events.map {
+                            SimulatorRunEventDto(
+                                tenantId = it.tenantId,
+                                runId = it.runId,
+                                seq = it.seq,
+                                eventType = it.eventType,
+                                source = it.source,
+                                payloadJson = it.payloadJson,
+                                createdAtMs = it.createdAtMs,
+                            )
+                        },
+                ),
+            )
         }
 
         get("/demo/simulator/runs/{runId}/telemetry") {
@@ -164,7 +183,24 @@ fun Route.simulatorModule(
             val sinceSeq = call.request.queryParameters["sinceSeq"]?.toLongOrNull() ?: 0L
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 250
             val telemetry = regenOpsStore.listTelemetry(tenantId, runId, sinceMs, sinceSeq, limit)
-            call.respond(SimulatorTelemetryResponse(telemetry = telemetry))
+            call.respond(
+                SimulatorTelemetryResponse(
+                    telemetry =
+                        telemetry.map {
+                            SimulatorTelemetryPointDto(
+                                tenantId = it.tenantId,
+                                runId = it.runId,
+                                seq = it.seq,
+                                gatewayId = it.gatewayId,
+                                metricKey = it.metricKey,
+                                metricValue = it.metricValue,
+                                unit = it.unit,
+                                driftScore = it.driftScore,
+                                recordedAtMs = it.recordedAtMs,
+                            )
+                        },
+                ),
+            )
         }
     }
 }
@@ -191,12 +227,36 @@ data class SimulatorRunResponse(
 
 @Serializable
 data class SimulatorEventsResponse(
-    val events: List<RegenRunEvent>,
+    val events: List<SimulatorRunEventDto>,
 )
 
 @Serializable
 data class SimulatorTelemetryResponse(
-    val telemetry: List<RegenTelemetryPoint>,
+    val telemetry: List<SimulatorTelemetryPointDto>,
+)
+
+@Serializable
+data class SimulatorRunEventDto(
+    val tenantId: String,
+    val runId: String,
+    val seq: Long,
+    val eventType: String,
+    val source: String,
+    val payloadJson: String,
+    val createdAtMs: Long,
+)
+
+@Serializable
+data class SimulatorTelemetryPointDto(
+    val tenantId: String,
+    val runId: String,
+    val seq: Long,
+    val gatewayId: String,
+    val metricKey: String,
+    val metricValue: Double,
+    val unit: String,
+    val driftScore: Double,
+    val recordedAtMs: Long,
 )
 
 private data class SimulatorBatch(
@@ -236,7 +296,12 @@ private class SimulatorGenerator(
             if (index % 20 == 0) {
                 events += buildEvent("sim.phase", timestamp, "{\"phase\":\"$phase\"}")
             }
-            val driftMultiplier = if (failureAt != null && index >= failureAt) 1.0 + ((index - failureAt) * 0.02) else 1.0
+            val driftMultiplier =
+                if (failureAt != null && index >= failureAt) {
+                    1.0 + ((index - failureAt) * 0.02)
+                } else {
+                    1.0
+                }
             if (failureAt != null && index == failureAt && !failureInjected) {
                 failureInjected = true
                 events += buildEvent("sim.failure.injected", timestamp, "{\"type\":\"pressure_spike\"}")

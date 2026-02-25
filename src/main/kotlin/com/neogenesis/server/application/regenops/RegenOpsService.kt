@@ -12,14 +12,15 @@ import kotlin.math.max
 class RegenOpsService(
     private val store: RegenOpsStore,
     private val driftThreshold: Double = 0.2,
-    private val complianceConfig: AppConfig.ComplianceConfig = AppConfig.ComplianceConfig(
-        enabled = false,
-        retentionDays = 3650,
-        wormModeEnabled = false,
-        esignEnabled = false,
-        scimEnabled = false,
-        samlEnabled = false,
-    ),
+    private val complianceConfig: AppConfig.ComplianceConfig =
+        AppConfig.ComplianceConfig(
+            enabled = false,
+            retentionDays = 3650,
+            wormModeEnabled = false,
+            esignEnabled = false,
+            scimEnabled = false,
+            samlEnabled = false,
+        ),
     private val complianceHooks: ComplianceHooks = ComplianceHooks.noop(),
 ) {
     fun createDraft(

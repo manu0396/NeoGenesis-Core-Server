@@ -129,7 +129,7 @@ private suspend fun runCertification(config: CertificationConfig): Certification
         when {
             dropRate > 0.1 -> "fail"
             !reconnectSuccess -> "warn"
-            p95LatencyMs > 1_000 -> "warn"
+            stats.p95Ms > 1_000 -> "warn"
             else -> "pass"
         }
 

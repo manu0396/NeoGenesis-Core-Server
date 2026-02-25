@@ -47,3 +47,4 @@ deploy/local/tls/
 # Aseguramos que el código generado por protobuf no se suba al repositorio,
 # ya que se generará dinámicamente en cada compilación.
 **/generated/source/proto/
+*.patch
