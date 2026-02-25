@@ -1,13 +1,3 @@
-NeoGenesis Core Server has been deployed.
-
-Service:
-  - HTTP: {{ .Values.service.port }}
-  - gRPC: {{ .Values.service.grpcPort }}
-
-If PostgreSQL is enabled:
-  - Host: neogenesis-postgres
-  - DB: {{ .Values.database.name }}
-  - User: {{ .Values.database.user }}
-
-Example:
-  kubectl port-forward svc/neogenesis-core-server {{ .Values.service.port }}:{{ .Values.service.port }}
+1. Ensure your PostgreSQL host/credentials match `values.yaml` (`postgres.host`, `postgres.user`, `postgres.password`).
+2. The chart exposes the server on port `{{ .Values.service.port }}` by default (ClusterIP `{{ .Values.service.type }}`).
+3. Access the UI via `http://<cluster-ip>:{{ .Values.service.port }}` once the pod is ready.

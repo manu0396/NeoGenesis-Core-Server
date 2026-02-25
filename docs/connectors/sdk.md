@@ -65,6 +65,18 @@ Use the built-in simulated driver for validation:
 val driver = SimulatedConnectorDriver()
 ```
 
+## Running the simulated connector
+The certification harness runs the connector inside `SandboxedDriver`, measures latency/drop/reconnect, and emits a JSON + Markdown report.
+
+```bash
+./gradlew :gateway:certifyConnector \
+  -PconnectorCertArgs="--driver=simulated-connector --events=250 --dropRate=0.05 --reconnectAt=175 --output=build/reports/connector-certification"
+```
+
+Reports are stored under `build/reports/connector-certification/certification-report.{json,md}` and include mean/p95 latency, drop rate, reconnect attempts, and pass/warn/fail status. Swap `--driver=example-driver` (or your own driver ID) once it implements `Driver`.
+
+For in-process validation, wrap `SimulatedConnectorDriver()` with `SandboxedDriver(..., timeoutMs = 1_000)` and observe `ManagedDriver.currentLifecycle()` while polling `readTelemetry()`.
+
 ## Configuration
 Drivers receive:
 - `tenantId`

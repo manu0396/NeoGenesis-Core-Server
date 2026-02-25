@@ -64,3 +64,5 @@ Write-Host "curl -H `"Authorization: Bearer $token`" -H `"X-Correlation-Id: demo
 Write-Host ""
 Write-Host "Export evidence bundle:"
 Write-Host "curl -H `"Authorization: Bearer $token`" -H `"X-Correlation-Id: demo-3`" `"http://localhost:8080/evidence-pack/job/$RunId/bundle.zip?tenant_id=$TenantId`" -o bundle.zip"
+Write-Host ""
+Write-Host "Quickstart guide: docs/demo/quickstart.md"

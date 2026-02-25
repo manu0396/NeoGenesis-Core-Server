@@ -1,6 +1,6 @@
 apiVersion: v2
-name: neogenesis-core-server
-description: NeoGenesis Core Server on-prem Helm chart
+name: neogenesis-onprem
+description: NeoGenesis Core Server on-prem packaging (Helm skeleton).
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

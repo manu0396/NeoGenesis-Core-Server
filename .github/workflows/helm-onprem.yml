@@ -1,0 +1,21 @@
+name: Helm On-Prem Validation
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/onprem/**'
+      - 'docs/deploy/**'
+      - '.github/workflows/helm-onprem.yml'
+
+jobs:
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v3
+        with:
+          version: v3.13.2
+      - name: Helm lint on-prem chart
+        run: helm lint deploy/onprem
+      - name: Helm template on-prem chart
+        run: helm template neogenesis deploy/onprem
