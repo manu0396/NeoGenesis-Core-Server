@@ -288,7 +288,8 @@ private class SimulatorGenerator(
 
         for (index in 0 until samples) {
             val timestamp = startMs + (index * intervalMs)
-            val phase = when {
+            val phase =
+                when {
                 index < samples / 3 -> "stabilizing"
                 index < (samples * 2 / 3) -> "printing"
                 else -> "cooldown"
@@ -348,7 +349,11 @@ private class SimulatorGenerator(
         return SimulatorBatch(events = events, telemetry = telemetry, alerts = alerts)
     }
 
-    private fun buildEvent(type: String, createdAtMs: Long, payloadJson: String): RegenRunEvent {
+    private fun buildEvent(
+        type: String,
+        createdAtMs: Long,
+        payloadJson: String,
+    ): RegenRunEvent {
         return RegenRunEvent(
             tenantId = tenantId,
             runId = runId,
@@ -359,9 +364,18 @@ private class SimulatorGenerator(
         )
     }
 
-    private fun computeDriftScore(value: Double, baseline: Double): Double {
+    private fun computeDriftScore(
+        value: Double,
+        baseline: Double,
+    ): Double {
         val delta = abs(value - baseline)
-        return min(1.0, max(0.0, delta / max(0.1, baseline)))
+        return min(
+            1.0,
+            max(
+                0.0,
+                delta / max(0.1, baseline),
+            ),
+        )
     }
 }
 

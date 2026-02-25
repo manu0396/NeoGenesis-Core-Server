@@ -14,7 +14,9 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
 
-fun Route.connectorCertificationModule(auditTrailService: AuditTrailService) {
+fun Route.connectorCertificationModule(
+    auditTrailService: AuditTrailService,
+) {
     authenticate("auth-jwt") {
         post("/admin/connectors/certify") {
             val principal = call.principal<NeoGenesisPrincipal>()

@@ -224,7 +224,10 @@ private fun io.ktor.server.application.ApplicationCall.requireTenantId(): String
     return tenantId
 }
 
-private fun requireTenantMatch(principal: NeoGenesisPrincipal, tenantId: String) {
+private fun requireTenantMatch(
+    principal: NeoGenesisPrincipal,
+    tenantId: String,
+) {
     val principalTenant = principal.tenantId
     if (!principalTenant.isNullOrBlank() && principalTenant != tenantId) {
         throw ApiException("tenant_mismatch", "tenant mismatch", HttpStatusCode.Forbidden)
@@ -292,8 +295,9 @@ private fun buildOidcUrl(
     return "$authUrl?$params"
 }
 
-private fun encode(value: String): String =
-    URLEncoder.encode(value, StandardCharsets.UTF_8)
+private fun encode(value: String): String {
+    return URLEncoder.encode(value, StandardCharsets.UTF_8)
+}
 
 @Serializable
 data class AdminWebStatus(
