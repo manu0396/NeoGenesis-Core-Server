@@ -36,6 +36,21 @@ data class RegenProtocolSummary(
     val updatedAtMs: Long,
 )
 
+data class ProtocolPublishApproval(
+    val id: String,
+    val tenantId: String,
+    val protocolId: String,
+    val status: String,
+    val requestedBy: String,
+    val requestedAtMs: Long,
+    val reason: String?,
+    val approvedBy: String?,
+    val approvedAtMs: Long?,
+    val approvalComment: String?,
+    val consumedBy: String?,
+    val consumedAtMs: Long?,
+)
+
 data class RegenRun(
     val tenantId: String,
     val runId: String,

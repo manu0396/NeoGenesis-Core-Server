@@ -1,14 +1,13 @@
-# Admin Web (Scaffold)
+﻿# Admin Web
 
-The admin web console is feature-flagged and currently serves a placeholder UI
-plus a minimal status API.
+Minimal admin console served as a standalone React app in `admin-web`.
 
-## Enable
+## Enable Backend Admin Web APIs
 ```
 ADMIN_WEB_MODE=true
 ```
 
-Optional OIDC login config:
+Optional OIDC config for the backend redirect endpoint:
 ```
 ADMIN_WEB_OIDC_AUTH_URL=https://issuer.example/authorize
 ADMIN_WEB_OIDC_CLIENT_ID=admin-web
@@ -16,14 +15,41 @@ ADMIN_WEB_OIDC_REDIRECT_URI=https://admin.example/callback
 ADMIN_WEB_OIDC_SCOPE="openid email profile"
 ```
 
-## Endpoints
+## Admin Web UI (Vite)
+From repo root:
+```
+cd admin-web
+npm install
+npm run dev
+```
+
+Env overrides for the UI:
+```
+VITE_API_BASE_URL=http://localhost:8080
+VITE_OIDC_AUTH_URL=https://issuer.example/authorize
+VITE_OIDC_CLIENT_ID=admin-web
+VITE_OIDC_REDIRECT_URI=https://admin.example/callback
+VITE_OIDC_SCOPE="openid email profile"
+```
+
+## Login Options
+- Dev login uses `POST /auth/login` with username/password.
+- OIDC token login lets you paste an access token (JWT) and optionally override role and tenant.
+- The UI passes `Authorization: Bearer <token>`, `tenant_id`, and `X-Correlation-Id` for admin requests.
+
+## UI Views
+- Gateways inventory (calls `/admin/web/gateways?tenant_id=...`).
+- Tenants and sites list (attempts `/admin/tenants` and `/admin/sites`, falls back to local stub data).
+- Feature flags toggle (admin-only, stored in local storage for now).
+
+## Admin Web Endpoints
 - `GET /admin/web` (HTML placeholder)
 - `GET /admin/web/status` (JSON)
 - `GET /admin/web/login/oidc` (redirect)
 - `GET /admin/web/gateways?tenant_id=...` (inventory)
 - `GET /admin/web/gateways/export?tenant_id=...` (CSV export)
 
-Both endpoints:
+All endpoints:
 - Require `Authorization: Bearer <JWT>`
 - Require `ADMIN` or `FOUNDER` role
 - Require `X-Correlation-Id` (or `X-Request-Id`)
@@ -33,5 +59,5 @@ Both endpoints:
 ```
 curl -H "Authorization: Bearer $TOKEN" \
   -H "X-Correlation-Id: corr-1" \
-  http://localhost:8080/admin/web/status
+  "http://localhost:8080/admin/web/status?tenant_id=tenant-a"
 ```

@@ -1,0 +1,16 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: neogenesis-postgres
+  labels:
+    app: neogenesis-postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: neogenesis-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}

@@ -1,0 +1,43 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: neogenesis-postgres
+  labels:
+    app: neogenesis-postgres
+spec:
+  serviceName: neogenesis-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neogenesis-postgres
+  template:
+    metadata:
+      labels:
+        app: neogenesis-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "{{ .Values.database.name }}"
+            - name: POSTGRES_USER
+              value: "{{ .Values.database.user }}"
+            - name: POSTGRES_PASSWORD
+              value: "{{ .Values.database.password }}"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage.size }}
+{{- end }}

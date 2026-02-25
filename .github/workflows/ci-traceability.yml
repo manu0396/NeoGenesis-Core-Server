@@ -52,3 +52,18 @@ jobs:
             build/distributions/*.zip
             build/distributions/*.tar
           if-no-files-found: error
+
+  helm-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint deploy/onprem
+
+      - name: Helm template
+        run: helm template neogenesis-core-server deploy/onprem -f deploy/onprem/values.example.yaml

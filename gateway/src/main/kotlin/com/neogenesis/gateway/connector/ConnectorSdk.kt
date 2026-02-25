@@ -1,5 +1,6 @@
 package com.neogenesis.gateway.connector
 
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import java.time.Instant
 
@@ -8,6 +9,40 @@ enum class Capability {
     Commands,
     Diagnostics,
 }
+
+data class ConnectorConfigField(
+    val key: String,
+    val description: String,
+    val required: Boolean = false,
+    val defaultValue: String? = null,
+    val secret: Boolean = false,
+)
+
+data class ConnectorManifest(
+    val id: String,
+    val name: String,
+    val version: String,
+    val vendor: String,
+    val capabilities: Set<Capability>,
+    val telemetrySchema: TelemetrySchema,
+    val configSchema: List<ConnectorConfigField> = emptyList(),
+    val description: String? = null,
+    val minGatewayVersion: String? = null,
+)
+
+enum class DriverState {
+    Created,
+    Initialized,
+    Started,
+    Stopped,
+    Failed,
+}
+
+data class DriverLifecycle(
+    val state: DriverState,
+    val updatedAt: Instant,
+    val error: String? = null,
+)
 
 data class TelemetrySchema(
     val name: String,
@@ -41,6 +76,16 @@ interface Driver {
     val id: String
     val capabilities: Set<Capability>
     val telemetrySchema: TelemetrySchema
+    val manifest: ConnectorManifest
+        get() =
+            ConnectorManifest(
+                id = id,
+                name = id,
+                version = "1.0.0",
+                vendor = "unknown",
+                capabilities = capabilities,
+                telemetrySchema = telemetrySchema,
+            )
 
     suspend fun init(context: DriverContext)
 
@@ -53,39 +98,139 @@ interface Driver {
     suspend fun readTelemetry(): TelemetryEvent
 }
 
-class SandboxedDriver(
+data class DriverTimeouts(
+    val initMs: Long,
+    val startMs: Long,
+    val stopMs: Long,
+    val healthMs: Long,
+    val readTelemetryMs: Long,
+) {
+    companion object {
+        fun fromSingle(timeoutMs: Long): DriverTimeouts {
+            return DriverTimeouts(
+                initMs = timeoutMs,
+                startMs = timeoutMs,
+                stopMs = timeoutMs,
+                healthMs = timeoutMs,
+                readTelemetryMs = timeoutMs,
+            )
+        }
+    }
+}
+
+class DriverTimeoutException(
+    val operation: String,
+    val timeoutMs: Long,
+) : RuntimeException("Driver operation '$operation' exceeded ${timeoutMs}ms")
+
+class ManagedDriver(
     private val delegate: Driver,
-    private val timeoutMs: Long,
 ) : Driver {
     override val id: String = delegate.id
     override val capabilities: Set<Capability> = delegate.capabilities
     override val telemetrySchema: TelemetrySchema = delegate.telemetrySchema
+    override val manifest: ConnectorManifest = delegate.manifest
+
+    @Volatile
+    private var lifecycle = DriverLifecycle(DriverState.Created, Instant.now())
+
+    fun currentLifecycle(): DriverLifecycle = lifecycle
 
     override suspend fun init(context: DriverContext) {
-        withTimeout(timeoutMs) {
+        requireState(DriverState.Created, DriverState.Stopped)
+        runWithLifecycle("init") {
             delegate.init(context)
+            transition(DriverState.Initialized, null)
         }
     }
 
     override suspend fun start() {
-        withTimeout(timeoutMs) {
+        requireState(DriverState.Initialized)
+        runWithLifecycle("start") {
             delegate.start()
+            transition(DriverState.Started, null)
         }
     }
 
     override suspend fun stop() {
-        withTimeout(timeoutMs) {
+        if (lifecycle.state == DriverState.Stopped) return
+        requireState(DriverState.Initialized, DriverState.Started)
+        runWithLifecycle("stop") {
             delegate.stop()
+            transition(DriverState.Stopped, null)
         }
     }
 
-    override suspend fun health(): DriverHealth =
-        withTimeout(timeoutMs) {
-            delegate.health()
+    override suspend fun health(): DriverHealth {
+        requireState(DriverState.Initialized, DriverState.Started, DriverState.Stopped)
+        return runWithLifecycle("health") { delegate.health() }
+    }
+
+    override suspend fun readTelemetry(): TelemetryEvent {
+        requireState(DriverState.Started)
+        return runWithLifecycle("readTelemetry") { delegate.readTelemetry() }
+    }
+
+    private fun requireState(vararg allowed: DriverState) {
+        if (!allowed.contains(lifecycle.state)) {
+            throw IllegalStateException("Driver state ${lifecycle.state} not in ${allowed.toList()}")
         }
+    }
+
+    private fun transition(state: DriverState, error: String?) {
+        lifecycle = DriverLifecycle(state = state, updatedAt = Instant.now(), error = error)
+    }
+
+    private suspend fun <T> runWithLifecycle(
+        operation: String,
+        block: suspend () -> T,
+    ): T {
+        return runCatching { block() }
+            .onFailure { error ->
+                transition(DriverState.Failed, "$operation:${error.message}")
+            }
+            .getOrThrow()
+    }
+}
+
+class SandboxedDriver(
+    private val delegate: Driver,
+    private val timeouts: DriverTimeouts,
+) : Driver {
+    constructor(delegate: Driver, timeoutMs: Long) : this(delegate, DriverTimeouts.fromSingle(timeoutMs))
+
+    override val id: String = delegate.id
+    override val capabilities: Set<Capability> = delegate.capabilities
+    override val telemetrySchema: TelemetrySchema = delegate.telemetrySchema
+    override val manifest: ConnectorManifest = delegate.manifest
+
+    override suspend fun init(context: DriverContext) {
+        runWithTimeout("init", timeouts.initMs) { delegate.init(context) }
+    }
+
+    override suspend fun start() {
+        runWithTimeout("start", timeouts.startMs) { delegate.start() }
+    }
+
+    override suspend fun stop() {
+        runWithTimeout("stop", timeouts.stopMs) { delegate.stop() }
+    }
+
+    override suspend fun health(): DriverHealth =
+        runWithTimeout("health", timeouts.healthMs) { delegate.health() }
 
     override suspend fun readTelemetry(): TelemetryEvent =
-        withTimeout(timeoutMs) {
-            delegate.readTelemetry()
+        runWithTimeout("readTelemetry", timeouts.readTelemetryMs) { delegate.readTelemetry() }
+
+    private suspend fun <T> runWithTimeout(
+        operation: String,
+        timeoutMs: Long,
+        block: suspend () -> T,
+    ): T {
+        return try {
+            withTimeout(timeoutMs) { block() }
+        } catch (_: TimeoutCancellationException) {
+            throw DriverTimeoutException(operation, timeoutMs)
         }
+    }
 }

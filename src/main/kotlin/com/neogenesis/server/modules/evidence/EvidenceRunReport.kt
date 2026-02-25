@@ -9,6 +9,9 @@ import java.time.Instant
 @Serializable
 data class EvidenceRunReport(
     val jobId: String,
+    val tenantId: String,
+    val actorId: String,
+    val correlationId: String,
     val generatedAt: String,
     val serverVersion: String,
     val telemetryCount: Int,
@@ -18,22 +21,43 @@ data class EvidenceRunReport(
     val lastTwinAt: String?,
 ) {
     fun toCsv(): String {
-        val lines = mutableListOf<String>()
-        lines += "section,key,value"
-        lines += "metadata,jobId,$jobId"
-        lines += "metadata,generatedAt,$generatedAt"
-        lines += "metadata,serverVersion,$serverVersion"
-        lines += "counts,telemetry,$telemetryCount"
-        lines += "counts,twin,$twinCount"
-        lines += "counts,auditEvents,$auditEventCount"
-        lines += "timing,lastTelemetryAt,${lastTelemetryAt ?: ""}"
-        lines += "timing,lastTwinAt,${lastTwinAt ?: ""}"
-        return lines.joinToString("\n")
+        val header =
+            listOf(
+                "job_id",
+                "tenant_id",
+                "actor_id",
+                "correlation_id",
+                "generated_at",
+                "server_version",
+                "telemetry_count",
+                "twin_count",
+                "audit_event_count",
+                "last_telemetry_at",
+                "last_twin_at",
+            )
+        val row =
+            listOf(
+                jobId,
+                tenantId,
+                actorId,
+                correlationId,
+                generatedAt,
+                serverVersion,
+                telemetryCount.toString(),
+                twinCount.toString(),
+                auditEventCount.toString(),
+                lastTelemetryAt.orEmpty(),
+                lastTwinAt.orEmpty(),
+            )
+        return header.joinToString(",") + "\n" + row.joinToString(",") { csvEscape(it) }
     }
 
     companion object {
         fun from(
             jobId: String,
+            tenantId: String,
+            actorId: String,
+            correlationId: String,
             telemetryRepository: TelemetryRepository,
             twinMetricsRepository: TwinMetricsRepository,
             auditLogRepository: AuditLogRepository,
@@ -44,6 +68,9 @@ data class EvidenceRunReport(
             val audit = auditLogRepository.listByJob(jobId, 10_000)
             return EvidenceRunReport(
                 jobId = jobId,
+                tenantId = tenantId,
+                actorId = actorId,
+                correlationId = correlationId,
                 generatedAt = Instant.now().toString(),
                 serverVersion = serverVersion,
                 telemetryCount = telemetry.size,
@@ -54,4 +81,12 @@ data class EvidenceRunReport(
             )
         }
     }
+}
+
+private fun csvEscape(value: String): String {
+    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+        val escaped = value.replace("\"", "\"\"")
+        return "\"$escaped\""
+    }
+    return value
 }
