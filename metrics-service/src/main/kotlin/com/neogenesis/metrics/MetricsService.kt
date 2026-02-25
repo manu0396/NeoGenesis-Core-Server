@@ -43,6 +43,10 @@ fun main() {
     server.start(wait = true)
 }
 
+internal fun Application.metricsModule(config: MetricsConfig) {
+    metricsModule(config, MetricsStore(config.storageDir))
+}
+
 private fun Application.metricsModule(
     config: MetricsConfig,
     store: MetricsStore,

@@ -1,6 +1,7 @@
 package com.neogenesis.server.modules
 
 import com.neogenesis.server.module
+import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
