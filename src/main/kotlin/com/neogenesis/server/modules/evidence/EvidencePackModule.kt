@@ -352,27 +352,32 @@ private object SimplePdfBuilder {
         val content = buildContent(lines)
         val contentBytes = content.toByteArray(Charsets.US_ASCII)
         val objects = mutableListOf<String>()
-        objects += buildPdfObject(
+        objects +=
+            buildPdfObject(
             "1 0 obj",
             "<< /Type /Catalog /Pages 2 0 R >>",
             "endobj",
         )
-        objects += buildPdfObject(
+        objects +=
+            buildPdfObject(
             "2 0 obj",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "endobj",
         )
-        objects += buildPdfObject(
+        objects +=
+            buildPdfObject(
             "3 0 obj",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
             "endobj",
         )
-        objects += buildPdfObject(
+        objects +=
+            buildPdfObject(
             "4 0 obj",
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
             "endobj",
         )
-        objects += buildPdfObject(
+        objects +=
+            buildPdfObject(
             "5 0 obj",
             "<< /Length ${contentBytes.size} >>",
             "stream",
