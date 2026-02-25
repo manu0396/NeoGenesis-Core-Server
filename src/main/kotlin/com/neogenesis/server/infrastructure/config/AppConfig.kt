@@ -422,6 +422,12 @@ data class AppConfig(
                     ?: config.string("neogenesis.database.maximumPoolSize")?.toIntOrNull()
                     ?: 10
 
+            val demoDbEnabled = env("DEMO_DB")?.equals("true", ignoreCase = true) ?: false
+            val demoDbUrl = "jdbc:h2:mem:neogenesis_demo;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"
+            val resolvedDbUrl = if (demoDbEnabled) demoDbUrl else dbUrl
+            val resolvedDbUser = if (demoDbEnabled) "sa" else dbUser
+            val resolvedDbPassword = if (demoDbEnabled) "" else dbPassword
+
             val corsAllowedOrigins =
                 (
                     env("CORS_ALLOWED_ORIGINS")
@@ -486,9 +492,9 @@ data class AppConfig(
 
             val databaseConfig =
                 DatabaseConfig(
-                    jdbcUrl = dbUrl,
-                    username = dbUser,
-                    password = dbPassword,
+                    jdbcUrl = resolvedDbUrl,
+                    username = resolvedDbUser,
+                    password = resolvedDbPassword,
                     maximumPoolSize = dbPoolSize,
                     migrateOnStartup = config.bool("neogenesis.database.migrateOnStartup") ?: true,
                     connectionTimeoutMs = config.string("neogenesis.database.connectionTimeoutMs")?.toLongOrNull() ?: 3_000L,
