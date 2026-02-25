@@ -17,8 +17,9 @@ import kotlinx.serialization.Serializable
 fun Route.connectorCertificationModule(auditTrailService: AuditTrailService) {
     authenticate("auth-jwt") {
         post("/admin/connectors/certify") {
-            val principal = call.principal<NeoGenesisPrincipal>()
-                ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
+            val principal =
+                call.principal<NeoGenesisPrincipal>()
+                    ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
             requireAdminOrFounder(principal)
 
             val request = call.receive<ConnectorCertificationRequest>()
@@ -43,12 +44,14 @@ fun Route.connectorCertificationModule(auditTrailService: AuditTrailService) {
                     resourceType = "connector",
                     resourceId = request.connectorId,
                     outcome = "accepted",
-                    requirementIds = listOf("REQ-ISO-006"),
-                    details = mapOf(
-                        "tenantId" to request.tenantId,
-                        "correlationId" to correlationId,
-                        "connectorVersion" to (request.connectorVersion ?: "unknown"),
-                    ),
+                    requirementIds =
+                        listOf("REQ-ISO-006"),
+                    details =
+                        mapOf(
+                            "tenantId" to request.tenantId,
+                            "correlationId" to correlationId,
+                            "connectorVersion" to (request.connectorVersion ?: "unknown"),
+                        ),
                 ),
             )
 
