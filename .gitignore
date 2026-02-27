@@ -48,3 +48,6 @@ deploy/local/tls/
 # ya que se generará dinámicamente en cada compilación.
 **/generated/source/proto/
 *.patch
+
+#Gemini
+gemini/settings.json
