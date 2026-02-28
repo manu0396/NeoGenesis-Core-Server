@@ -73,7 +73,10 @@ class JdbcTelemetryEventStore(private val dataSource: DataSource) : TelemetryEve
         }
     }
 
-    override fun recent(tenantId: String, limit: Int): List<TelemetryEvent> {
+    override fun recent(
+        tenantId: String,
+        limit: Int,
+    ): List<TelemetryEvent> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -141,7 +144,10 @@ class JdbcControlCommandStore(private val dataSource: DataSource) : ControlComma
         }
     }
 
-    override fun recent(tenantId: String, limit: Int): List<ControlCommandEvent> {
+    override fun recent(
+        tenantId: String,
+        limit: Int,
+    ): List<ControlCommandEvent> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -244,7 +250,10 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
         }
     }
 
-    override fun findByPrinterId(tenantId: String, printerId: String): DigitalTwinState? {
+    override fun findByPrinterId(
+        tenantId: String,
+        printerId: String,
+    ): DigitalTwinState? {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -347,7 +356,10 @@ class JdbcClinicalDocumentStore(
         }
     }
 
-    override fun recent(tenantId: String, limit: Int): List<ClinicalDocument> {
+    override fun recent(
+        tenantId: String,
+        limit: Int,
+    ): List<ClinicalDocument> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -479,7 +491,10 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
         }
     }
 
-    override fun recent(tenantId: String, limit: Int): List<AuditEvent> {
+    override fun recent(
+        tenantId: String,
+        limit: Int,
+    ): List<AuditEvent> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -528,7 +543,10 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
         }
     }
 
-    override fun verifyChain(tenantId: String, limit: Int): AuditChainVerification {
+    override fun verifyChain(
+        tenantId: String,
+        limit: Int,
+    ): AuditChainVerification {
         dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """

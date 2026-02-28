@@ -77,11 +77,20 @@ class RetinalPlanningService(
         return plan
     }
 
-    fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan? = retinalPlanStore.findByPlanId(tenantId, planId)
+    fun findByPlanId(
+        tenantId: String,
+        planId: String,
+    ): RetinalPrintPlan? = retinalPlanStore.findByPlanId(tenantId, planId)
 
-    fun findRecent(tenantId: String, limit: Int = 100): List<RetinalPrintPlan> = retinalPlanStore.findRecent(tenantId, limit)
+    fun findRecent(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<RetinalPrintPlan> = retinalPlanStore.findRecent(tenantId, limit)
 
-    fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan? = retinalPlanStore.findLatestByPatientId(tenantId, patientId)
+    fun findLatestByPatientId(
+        tenantId: String,
+        patientId: String,
+    ): RetinalPrintPlan? = retinalPlanStore.findLatestByPatientId(tenantId, patientId)
 
     private fun retinalLayerName(index: Int): String {
         return when (index) {

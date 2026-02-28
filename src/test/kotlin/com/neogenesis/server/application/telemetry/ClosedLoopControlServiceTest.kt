@@ -94,14 +94,20 @@ class ClosedLoopControlServiceTest {
             updatedAtMs: Long,
         ) = Unit
 
-        override fun findBySessionId(tenantId: String, sessionId: String): PrintSession? =
-            active?.takeIf { it.tenantId == tenantId && it.sessionId == sessionId }
+        override fun findBySessionId(
+            tenantId: String,
+            sessionId: String,
+        ): PrintSession? = active?.takeIf { it.tenantId == tenantId && it.sessionId == sessionId }
 
-        override fun findActiveByPrinterId(tenantId: String, printerId: String): PrintSession? =
-            active?.takeIf { it.tenantId == tenantId && it.printerId == printerId }
+        override fun findActiveByPrinterId(
+            tenantId: String,
+            printerId: String,
+        ): PrintSession? = active?.takeIf { it.tenantId == tenantId && it.printerId == printerId }
 
-        override fun findActive(tenantId: String, limit: Int): List<PrintSession> =
-            listOfNotNull(active).filter { it.tenantId == tenantId }
+        override fun findActive(
+            tenantId: String,
+            limit: Int,
+        ): List<PrintSession> = listOfNotNull(active).filter { it.tenantId == tenantId }
     }
 
     private class FakeRetinalPlanStore(
@@ -109,13 +115,19 @@ class ClosedLoopControlServiceTest {
     ) : RetinalPlanStore {
         override fun save(plan: RetinalPrintPlan) = Unit
 
-        override fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan? =
-            plan.takeIf { it.tenantId == tenantId && it.planId == planId }
+        override fun findByPlanId(
+            tenantId: String,
+            planId: String,
+        ): RetinalPrintPlan? = plan.takeIf { it.tenantId == tenantId && it.planId == planId }
 
-        override fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan? =
-            plan.takeIf { it.tenantId == tenantId && it.patientId == patientId }
+        override fun findLatestByPatientId(
+            tenantId: String,
+            patientId: String,
+        ): RetinalPrintPlan? = plan.takeIf { it.tenantId == tenantId && it.patientId == patientId }
 
-        override fun findRecent(tenantId: String, limit: Int): List<RetinalPrintPlan> =
-            listOf(plan).filter { it.tenantId == tenantId }
+        override fun findRecent(
+            tenantId: String,
+            limit: Int,
+        ): List<RetinalPrintPlan> = listOf(plan).filter { it.tenantId == tenantId }
     }
 }

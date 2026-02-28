@@ -121,9 +121,15 @@ class GdprService(
         return record
     }
 
-    fun recentErasures(tenantId: String, limit: Int): List<GdprErasureRecord> = gdprStore.recentErasures(tenantId, limit)
+    fun recentErasures(
+        tenantId: String,
+        limit: Int,
+    ): List<GdprErasureRecord> = gdprStore.recentErasures(tenantId, limit)
 
-    fun enforceRetention(tenantId: String, actor: String): Int {
+    fun enforceRetention(
+        tenantId: String,
+        actor: String,
+    ): Int {
         val affected = gdprStore.anonymizeExpiredClinicalDocuments(tenantId)
         auditTrailService.record(
             AuditEvent(

@@ -4,8 +4,26 @@ import com.neogenesis.server.application.AuditTrailService
 import com.neogenesis.server.application.ControlDecisionService
 import com.neogenesis.server.application.InMemoryTelemetrySnapshotService
 import com.neogenesis.server.application.billing.BillingService
+import com.neogenesis.server.application.clinical.ClinicalDimseService
+import com.neogenesis.server.application.clinical.ClinicalIntegrationService
+import com.neogenesis.server.application.clinical.ClinicalPacsService
+import com.neogenesis.server.application.clinical.ClinicalValidationService
+import com.neogenesis.server.application.clinical.FhirCohortAnalyticsService
+import com.neogenesis.server.application.clinical.Hl7MllpGatewayService
+import com.neogenesis.server.application.compliance.ComplianceTraceabilityService
+import com.neogenesis.server.application.compliance.GdprService
 import com.neogenesis.server.application.compliance.LoggingComplianceHooks
+import com.neogenesis.server.application.compliance.RegulatoryComplianceService
+import com.neogenesis.server.application.quality.QualityScoringService
 import com.neogenesis.server.application.regenops.RegenOpsService
+import com.neogenesis.server.application.resilience.IntegrationResilienceExecutor
+import com.neogenesis.server.application.resilience.RequestIdempotencyService
+import com.neogenesis.server.application.retina.RetinalPlanningService
+import com.neogenesis.server.application.security.DefaultAbacPolicyEngine
+import com.neogenesis.server.application.serverless.OutboxRetryPolicy
+import com.neogenesis.server.application.serverless.PublishResult
+import com.neogenesis.server.application.serverless.ServerlessDispatchService
+import com.neogenesis.server.application.session.PrintSessionService
 import com.neogenesis.server.application.sre.LatencyBudgetService
 import com.neogenesis.server.application.telemetry.AdvancedBioSimulationService
 import com.neogenesis.server.application.telemetry.ClosedLoopControlService
@@ -14,6 +32,7 @@ import com.neogenesis.server.application.twin.DigitalTwinService
 import com.neogenesis.server.domain.policy.DefaultTelemetrySafetyPolicy
 import com.neogenesis.server.infrastructure.billing.FakeBillingProvider
 import com.neogenesis.server.infrastructure.billing.StripeBillingProvider
+import com.neogenesis.server.infrastructure.clinical.Hl7MllpClient
 import com.neogenesis.server.infrastructure.config.AppConfig
 import com.neogenesis.server.infrastructure.config.ProductionReadinessValidator
 import com.neogenesis.server.infrastructure.grpc.BioPrintGrpcService
@@ -34,11 +53,15 @@ import com.neogenesis.server.infrastructure.persistence.CanonicalRole
 import com.neogenesis.server.infrastructure.persistence.DatabaseFactory
 import com.neogenesis.server.infrastructure.persistence.DeviceRepository
 import com.neogenesis.server.infrastructure.persistence.JdbcAuditEventStore
+import com.neogenesis.server.infrastructure.persistence.JdbcClinicalDocumentStore
 import com.neogenesis.server.infrastructure.persistence.JdbcControlCommandStore
 import com.neogenesis.server.infrastructure.persistence.JdbcDigitalTwinStore
+import com.neogenesis.server.infrastructure.persistence.JdbcGdprStore
 import com.neogenesis.server.infrastructure.persistence.JdbcLatencyBreachStore
 import com.neogenesis.server.infrastructure.persistence.JdbcPrintSessionStore
 import com.neogenesis.server.infrastructure.persistence.JdbcRegenOpsStore
+import com.neogenesis.server.infrastructure.persistence.JdbcRegulatoryStore
+import com.neogenesis.server.infrastructure.persistence.JdbcRequestIdempotencyStore
 import com.neogenesis.server.infrastructure.persistence.JdbcRetinalPlanStore
 import com.neogenesis.server.infrastructure.persistence.JdbcTelemetryEventStore
 import com.neogenesis.server.infrastructure.persistence.JobRepository
@@ -51,6 +74,8 @@ import com.neogenesis.server.infrastructure.security.SecretResolver
 import com.neogenesis.server.infrastructure.security.SecurityPluginException
 import com.neogenesis.server.infrastructure.security.configureAuthentication
 import com.neogenesis.server.infrastructure.security.configureHttpProxyMutualTlsValidation
+import com.neogenesis.server.infrastructure.security.configureRateLimiting
+import com.neogenesis.server.infrastructure.security.configureTenantIsolation
 import com.neogenesis.server.modules.ApiException
 import com.neogenesis.server.modules.AuthTokenIssuer
 import com.neogenesis.server.modules.BruteForceLimiter
@@ -77,6 +102,16 @@ import com.neogenesis.server.modules.jobsModule
 import com.neogenesis.server.modules.shouldBootstrapAdmin
 import com.neogenesis.server.modules.telemetryModule
 import com.neogenesis.server.modules.trace.traceMetricsModule
+import com.neogenesis.server.presentation.http.clinicalRoutes
+import com.neogenesis.server.presentation.http.complianceRoutes
+import com.neogenesis.server.presentation.http.digitalTwinRoutes
+import com.neogenesis.server.presentation.http.gdprRoutes
+import com.neogenesis.server.presentation.http.healthRoutes
+import com.neogenesis.server.presentation.http.printSessionRoutes
+import com.neogenesis.server.presentation.http.qualityRoutes
+import com.neogenesis.server.presentation.http.regulatoryRoutes
+import com.neogenesis.server.presentation.http.retinaRoutes
+import com.neogenesis.server.presentation.http.telemetryRoutes
 import io.grpc.ServerInterceptors
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -98,42 +133,6 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.statuspages.StatusPages
-import com.neogenesis.server.application.security.DefaultAbacPolicyEngine
-import com.neogenesis.server.infrastructure.security.configureRateLimiting
-import com.neogenesis.server.infrastructure.security.configureTenantIsolation
-import com.neogenesis.server.presentation.http.clinicalRoutes
-import com.neogenesis.server.presentation.http.complianceRoutes
-import com.neogenesis.server.presentation.http.digitalTwinRoutes
-import com.neogenesis.server.presentation.http.gdprRoutes
-import com.neogenesis.server.presentation.http.healthRoutes
-import com.neogenesis.server.presentation.http.qualityRoutes
-import com.neogenesis.server.application.quality.QualityScoringService
-import com.neogenesis.server.presentation.http.printSessionRoutes
-import com.neogenesis.server.presentation.http.regulatoryRoutes
-import com.neogenesis.server.presentation.http.retinaRoutes
-import com.neogenesis.server.presentation.http.sreRoutes
-import com.neogenesis.server.presentation.http.telemetryRoutes
-import com.neogenesis.server.application.clinical.ClinicalDimseService
-import com.neogenesis.server.application.clinical.ClinicalIntegrationService
-import com.neogenesis.server.application.clinical.ClinicalPacsService
-import com.neogenesis.server.application.clinical.ClinicalValidationService
-import com.neogenesis.server.application.clinical.FhirCohortAnalyticsService
-import com.neogenesis.server.application.clinical.Hl7MllpGatewayService
-import com.neogenesis.server.application.compliance.ComplianceTraceabilityService
-import com.neogenesis.server.application.compliance.GdprService
-import com.neogenesis.server.application.compliance.RegulatoryComplianceService
-import com.neogenesis.server.application.resilience.IntegrationResilienceExecutor
-import com.neogenesis.server.application.resilience.RequestIdempotencyService
-import com.neogenesis.server.application.retina.RetinalPlanningService
-import com.neogenesis.server.application.session.PrintSessionService
-import com.neogenesis.server.infrastructure.clinical.Hl7MllpClient
-import com.neogenesis.server.infrastructure.persistence.JdbcClinicalDocumentStore
-import com.neogenesis.server.infrastructure.persistence.JdbcGdprStore
-import com.neogenesis.server.infrastructure.persistence.JdbcRegulatoryStore
-import com.neogenesis.server.infrastructure.persistence.JdbcRequestIdempotencyStore
-import com.neogenesis.server.application.serverless.ServerlessDispatchService
-import com.neogenesis.server.application.serverless.OutboxRetryPolicy
-import com.neogenesis.server.application.serverless.PublishResult
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
@@ -257,7 +256,7 @@ fun Application.module() {
                 MDC.put("traceId", call.callId ?: "missing-trace-id")
                 MDC.put("correlationId", call.callId ?: "missing-correlation-id")
                 MDC.put("endpoint", "${call.request.httpMethod.value} ${call.request.path()}")
-                
+
                 val runId = call.parameters["runId"] ?: call.parameters["sessionId"] ?: call.request.headers["X-Run-Id"]
                 if (runId != null) {
                     MDC.put("runId", runId)
@@ -435,61 +434,70 @@ fun Application.module() {
             latencyBudgetService = cleanLatencyBudgetService,
         )
 
-    val cleanResilienceExecutor = IntegrationResilienceExecutor(
-        appConfig.resilience.enabled,
-        appConfig.resilience.integrationTimeoutMs,
-        appConfig.resilience.circuitBreakerFailureThreshold,
-        appConfig.resilience.circuitBreakerOpenStateMs,
-        operationalMetrics
-    )
-    val cleanGdprService = GdprService(JdbcGdprStore(dataSource), auditTrailService, appConfig.gdpr)
-    
-    val cleanOutboxStore = com.neogenesis.server.infrastructure.persistence.JdbcOutboxEventStore(dataSource)
-    val cleanServerlessDispatchService = ServerlessDispatchService(
-        outboxEventStore = cleanOutboxStore,
-        metricsService = operationalMetrics,
-        outboxEventPublisher = { PublishResult.Success }, // Default logging publisher
-        retryPolicy = OutboxRetryPolicy(
-            maxRetries = appConfig.serverless.maxRetries,
-            baseBackoffMs = appConfig.serverless.baseBackoffMs,
-            maxBackoffMs = appConfig.serverless.maxBackoffMs
+    val cleanResilienceExecutor =
+        IntegrationResilienceExecutor(
+            appConfig.resilience.enabled,
+            appConfig.resilience.integrationTimeoutMs,
+            appConfig.resilience.circuitBreakerFailureThreshold,
+            appConfig.resilience.circuitBreakerOpenStateMs,
+            operationalMetrics,
         )
-    )
+    val cleanGdprService = GdprService(JdbcGdprStore(dataSource), auditTrailService, appConfig.gdpr)
 
-    val cleanClinicalIntegrationService = ClinicalIntegrationService(
-        clinicalDocumentStore = JdbcClinicalDocumentStore(dataSource, defaultRetentionDays = appConfig.compliance.retentionDays),
-        auditTrailService = auditTrailService,
-        metricsService = operationalMetrics,
-        serverlessDispatchService = cleanServerlessDispatchService,
-        validationService = ClinicalValidationService(appConfig.clinical.validation),
-        gdprService = cleanGdprService
-    )
-    val cleanClinicalPacsService = ClinicalPacsService(
-        dicomWebClient = null,
-        clinicalIntegrationService = cleanClinicalIntegrationService,
-        metricsService = operationalMetrics,
-        resilienceExecutor = cleanResilienceExecutor
-    )
-    val cleanClinicalDimseService = ClinicalDimseService(
-        dimseClient = null,
-        resilienceExecutor = cleanResilienceExecutor
-    )
+    val cleanOutboxStore = com.neogenesis.server.infrastructure.persistence.JdbcOutboxEventStore(dataSource)
+    val cleanServerlessDispatchService =
+        ServerlessDispatchService(
+            outboxEventStore = cleanOutboxStore,
+            metricsService = operationalMetrics,
+            outboxEventPublisher = { PublishResult.Success }, // Default logging publisher
+            retryPolicy =
+                OutboxRetryPolicy(
+                    maxRetries = appConfig.serverless.maxRetries,
+                    baseBackoffMs = appConfig.serverless.baseBackoffMs,
+                    maxBackoffMs = appConfig.serverless.maxBackoffMs,
+                ),
+        )
+
+    val cleanClinicalIntegrationService =
+        ClinicalIntegrationService(
+            clinicalDocumentStore = JdbcClinicalDocumentStore(dataSource, defaultRetentionDays = appConfig.compliance.retentionDays),
+            auditTrailService = auditTrailService,
+            metricsService = operationalMetrics,
+            serverlessDispatchService = cleanServerlessDispatchService,
+            validationService = ClinicalValidationService(appConfig.clinical.validation),
+            gdprService = cleanGdprService,
+        )
+    val cleanClinicalPacsService =
+        ClinicalPacsService(
+            dicomWebClient = null,
+            clinicalIntegrationService = cleanClinicalIntegrationService,
+            metricsService = operationalMetrics,
+            resilienceExecutor = cleanResilienceExecutor,
+        )
+    val cleanClinicalDimseService =
+        ClinicalDimseService(
+            dimseClient = null,
+            resilienceExecutor = cleanResilienceExecutor,
+        )
     val cleanFhirCohortAnalyticsService = FhirCohortAnalyticsService(JdbcClinicalDocumentStore(dataSource))
-    val cleanHl7MllpGatewayService = Hl7MllpGatewayService(
-        mllpClient = Hl7MllpClient(),
-        clinicalIntegrationService = cleanClinicalIntegrationService,
-        mllpConfig = appConfig.clinical.hl7Mllp,
-        metricsService = operationalMetrics,
-        resilienceExecutor = cleanResilienceExecutor
-    )
-    val cleanIdempotencyService = RequestIdempotencyService(
-        store = JdbcRequestIdempotencyStore(dataSource),
-        metricsService = operationalMetrics,
-        ttlSeconds = appConfig.resilience.idempotencyTtlSeconds
-    )
+    val cleanHl7MllpGatewayService =
+        Hl7MllpGatewayService(
+            mllpClient = Hl7MllpClient(),
+            clinicalIntegrationService = cleanClinicalIntegrationService,
+            mllpConfig = appConfig.clinical.hl7Mllp,
+            metricsService = operationalMetrics,
+            resilienceExecutor = cleanResilienceExecutor,
+        )
+    val cleanIdempotencyService =
+        RequestIdempotencyService(
+            store = JdbcRequestIdempotencyStore(dataSource),
+            metricsService = operationalMetrics,
+            ttlSeconds = appConfig.resilience.idempotencyTtlSeconds,
+        )
     val cleanRetinalPlanningService = RetinalPlanningService(cleanRetinalPlanStore, auditTrailService, operationalMetrics)
     val cleanPrintSessionService = PrintSessionService(cleanPrintSessionStore, auditTrailService, operationalMetrics)
-    val cleanRegulatoryComplianceService = RegulatoryComplianceService(JdbcRegulatoryStore(dataSource), auditTrailService, operationalMetrics)
+    val cleanRegulatoryComplianceService =
+        RegulatoryComplianceService(JdbcRegulatoryStore(dataSource), auditTrailService, operationalMetrics)
     val cleanQualityScoringService = QualityScoringService()
     val cleanTraceabilityService = ComplianceTraceabilityService.fromClasspath()
 
@@ -689,7 +697,7 @@ fun Application.module() {
         healthRoutes(
             grpcPort = appConfig.grpcPort,
             traceabilityService = cleanTraceabilityService,
-            dataSource = dataSource
+            dataSource = dataSource,
         )
         telemetryRoutes(
             telemetrySnapshotService = cleanTelemetrySnapshotService,
@@ -697,11 +705,11 @@ fun Application.module() {
             controlCommandStore = cleanControlCommandStore,
             telemetryProcessingService = cleanTelemetryProcessingService,
             metricsService = operationalMetrics,
-            abacPolicyEngine = abacPolicyEngine
+            abacPolicyEngine = abacPolicyEngine,
         )
         digitalTwinRoutes(
             digitalTwinService = DigitalTwinService(cleanDigitalTwinStore),
-            metricsService = operationalMetrics
+            metricsService = operationalMetrics,
         )
         clinicalRoutes(
             clinicalIntegrationService = cleanClinicalIntegrationService,
@@ -712,41 +720,53 @@ fun Application.module() {
             idempotencyService = cleanIdempotencyService,
             requireIdempotencyKey = appConfig.resilience.requireIdempotencyKey,
             metricsService = operationalMetrics,
-            abacPolicyEngine = abacPolicyEngine
+            abacPolicyEngine = abacPolicyEngine,
         )
         retinaRoutes(
             retinalPlanningService = cleanRetinalPlanningService,
-            metricsService = operationalMetrics
+            metricsService = operationalMetrics,
         )
         printSessionRoutes(
             printSessionService = cleanPrintSessionService,
-            metricsService = operationalMetrics
+            metricsService = operationalMetrics,
         )
         complianceRoutes(
             traceabilityService = cleanTraceabilityService,
             auditTrailService = auditTrailService,
             metricsService = operationalMetrics,
-            billingService = billingService
+            billingService = billingService,
         )
         regulatoryRoutes(
             regulatoryComplianceService = cleanRegulatoryComplianceService,
             metricsService = operationalMetrics,
-            abacPolicyEngine = abacPolicyEngine
+            abacPolicyEngine = abacPolicyEngine,
         )
         gdprRoutes(
             gdprService = cleanGdprService,
-            metricsService = operationalMetrics
+            metricsService = operationalMetrics,
         )
         qualityRoutes(
             qualityScoringService = cleanQualityScoringService,
             telemetryEventStore = cleanTelemetryEventStore,
-            metricsService = operationalMetrics
+            metricsService = operationalMetrics,
         )
     }
 }
 
 private fun clearMdc() {
-    listOf("env", "service", "version", "traceId", "correlationId", "userId", "tenantId", "runId", "endpoint", "status", "durationMs").forEach {
+    listOf(
+        "env",
+        "service",
+        "version",
+        "traceId",
+        "correlationId",
+        "userId",
+        "tenantId",
+        "runId",
+        "endpoint",
+        "status",
+        "durationMs",
+    ).forEach {
         MDC.remove(it)
     }
 }
@@ -760,4 +780,3 @@ private fun readServerVersion(): String {
         File("backend/VERSION").readText(Charsets.UTF_8).trim()
     }.getOrElse { "1.0.0" }
 }
-

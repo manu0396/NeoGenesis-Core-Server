@@ -236,7 +236,10 @@ class DeviceRepository(private val dataSource: DataSource) {
         return DeviceRecord(id = id, tenantId = tenantId, name = name, createdAt = now)
     }
 
-    fun find(tenantId: String?, id: String): DeviceRecord? {
+    fun find(
+        tenantId: String?,
+        id: String,
+    ): DeviceRecord? {
         return dataSource.inTransaction { connection ->
             connection.setTenant(tenantId)
             connection.prepareStatement(
@@ -263,7 +266,10 @@ class DeviceRepository(private val dataSource: DataSource) {
         }
     }
 
-    fun list(tenantId: String?, limit: Int): List<DeviceRecord> {
+    fun list(
+        tenantId: String?,
+        limit: Int,
+    ): List<DeviceRecord> {
         return dataSource.inTransaction { connection ->
             connection.setTenant(tenantId)
             connection.prepareStatement(
@@ -335,7 +341,10 @@ class JobRepository(private val dataSource: DataSource) {
         return get(tenantId, id) ?: error("Failed to create print job")
     }
 
-    fun get(tenantId: String?, id: String): JobRecord? {
+    fun get(
+        tenantId: String?,
+        id: String,
+    ): JobRecord? {
         return dataSource.inTransaction { connection ->
             connection.setTenant(tenantId)
             connection.prepareStatement(
@@ -364,7 +373,10 @@ class JobRepository(private val dataSource: DataSource) {
         }
     }
 
-    fun list(tenantId: String?, limit: Int): List<JobRecord> {
+    fun list(
+        tenantId: String?,
+        limit: Int,
+    ): List<JobRecord> {
         return dataSource.inTransaction { connection ->
             connection.setTenant(tenantId)
             connection.prepareStatement(

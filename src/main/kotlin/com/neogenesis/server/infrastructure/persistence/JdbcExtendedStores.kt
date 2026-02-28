@@ -83,7 +83,10 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
         }
     }
 
-    override fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan? {
+    override fun findByPlanId(
+        tenantId: String,
+        planId: String,
+    ): RetinalPrintPlan? {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -109,7 +112,10 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
         }
     }
 
-    override fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan? {
+    override fun findLatestByPatientId(
+        tenantId: String,
+        patientId: String,
+    ): RetinalPrintPlan? {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -137,7 +143,10 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
         }
     }
 
-    override fun findRecent(tenantId: String, limit: Int): List<RetinalPrintPlan> {
+    override fun findRecent(
+        tenantId: String,
+        limit: Int,
+    ): List<RetinalPrintPlan> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -226,7 +235,10 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
         }
     }
 
-    override fun findBySessionId(tenantId: String, sessionId: String): PrintSession? {
+    override fun findBySessionId(
+        tenantId: String,
+        sessionId: String,
+    ): PrintSession? {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -252,7 +264,10 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
         }
     }
 
-    override fun findActiveByPrinterId(tenantId: String, printerId: String): PrintSession? {
+    override fun findActiveByPrinterId(
+        tenantId: String,
+        printerId: String,
+    ): PrintSession? {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -281,7 +296,10 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
         }
     }
 
-    override fun findActive(tenantId: String, limit: Int): List<PrintSession> {
+    override fun findActive(
+        tenantId: String,
+        limit: Int,
+    ): List<PrintSession> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -341,7 +359,10 @@ class JdbcLatencyBreachStore(private val dataSource: DataSource) : LatencyBreach
         }
     }
 
-    override fun recent(tenantId: String, limit: Int): List<LatencyBreachEvent> {
+    override fun recent(
+        tenantId: String,
+        limit: Int,
+    ): List<LatencyBreachEvent> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """

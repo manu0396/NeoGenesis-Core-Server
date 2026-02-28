@@ -76,7 +76,10 @@ class RegulatoryComplianceService(
         return updated
     }
 
-    fun listCapas(tenantId: String, limit: Int): List<CapaRecord> = regulatoryStore.listCapas(tenantId, limit)
+    fun listCapas(
+        tenantId: String,
+        limit: Int,
+    ): List<CapaRecord> = regulatoryStore.listCapas(tenantId, limit)
 
     fun upsertRisk(
         tenantId: String,
@@ -103,7 +106,10 @@ class RegulatoryComplianceService(
         )
     }
 
-    fun listRisks(tenantId: String, limit: Int): List<RiskRecord> = regulatoryStore.listRisks(tenantId, limit)
+    fun listRisks(
+        tenantId: String,
+        limit: Int,
+    ): List<RiskRecord> = regulatoryStore.listRisks(tenantId, limit)
 
     fun addDhfArtifact(
         tenantId: String,
@@ -146,5 +152,8 @@ class RegulatoryComplianceService(
         return artifact
     }
 
-    fun listDhfArtifacts(tenantId: String, limit: Int): List<DhfArtifact> = regulatoryStore.listDhfArtifacts(tenantId, limit)
+    fun listDhfArtifacts(
+        tenantId: String,
+        limit: Int,
+    ): List<DhfArtifact> = regulatoryStore.listDhfArtifacts(tenantId, limit)
 }

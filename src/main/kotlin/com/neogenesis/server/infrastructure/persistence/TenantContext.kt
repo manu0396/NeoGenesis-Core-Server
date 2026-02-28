@@ -14,7 +14,10 @@ object TenantContext {
         currentTenant.set(tenantId)
     }
 
-    suspend fun <T> withTenant(tenantId: String, block: suspend () -> T): T {
+    suspend fun <T> withTenant(
+        tenantId: String,
+        block: suspend () -> T,
+    ): T {
         return withContext(currentTenant.asContextElement(tenantId)) {
             block()
         }
@@ -35,6 +38,9 @@ fun DataSource.getTenantConnection(tenantId: String? = TenantContext.get()): Con
     return connection
 }
 
-inline fun <T> DataSource.useTenantConnection(tenantId: String? = TenantContext.get(), block: (Connection) -> T): T {
+inline fun <T> DataSource.useTenantConnection(
+    tenantId: String? = TenantContext.get(),
+    block: (Connection) -> T,
+): T {
     return getTenantConnection(tenantId).use(block)
 }

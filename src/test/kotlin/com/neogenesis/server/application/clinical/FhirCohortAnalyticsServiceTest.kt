@@ -52,7 +52,10 @@ class FhirCohortAnalyticsServiceTest {
     ) : ClinicalDocumentStore {
         override fun append(document: ClinicalDocument) = Unit
 
-        override fun recent(tenantId: String, limit: Int): List<ClinicalDocument> = docs.filter { it.tenantId == tenantId }.take(limit)
+        override fun recent(
+            tenantId: String,
+            limit: Int,
+        ): List<ClinicalDocument> = docs.filter { it.tenantId == tenantId }.take(limit)
 
         override fun findByPatientId(
             tenantId: String,

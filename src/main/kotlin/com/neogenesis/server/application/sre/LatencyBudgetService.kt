@@ -53,5 +53,8 @@ class LatencyBudgetService(
         )
     }
 
-    fun recentBreaches(tenantId: String, limit: Int = 200): List<LatencyBreachEvent> = latencyBreachStore.recent(tenantId, limit)
+    fun recentBreaches(
+        tenantId: String,
+        limit: Int = 200,
+    ): List<LatencyBreachEvent> = latencyBreachStore.recent(tenantId, limit)
 }

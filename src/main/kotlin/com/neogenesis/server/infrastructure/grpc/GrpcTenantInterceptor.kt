@@ -19,7 +19,7 @@ class GrpcTenantInterceptor : ServerInterceptor {
 
         val context = Context.current().withValue(GrpcAuthContextKeys.tenantId, tenantId)
         TenantContext.set(tenantId)
-        
+
         return Contexts.interceptCall(context, call, headers, next)
     }
 

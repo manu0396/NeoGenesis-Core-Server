@@ -39,7 +39,10 @@ interface ControlCommandStore {
 interface DigitalTwinStore {
     fun upsert(state: DigitalTwinState)
 
-    fun findByPrinterId(tenantId: String, printerId: String): DigitalTwinState?
+    fun findByPrinterId(
+        tenantId: String,
+        printerId: String,
+    ): DigitalTwinState?
 
     fun findAll(tenantId: String): List<DigitalTwinState>
 }
@@ -47,7 +50,10 @@ interface DigitalTwinStore {
 interface ClinicalDocumentStore {
     fun append(document: ClinicalDocument)
 
-    fun recent(tenantId: String, limit: Int = 100): List<ClinicalDocument>
+    fun recent(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<ClinicalDocument>
 
     fun findByPatientId(
         tenantId: String,
@@ -59,19 +65,34 @@ interface ClinicalDocumentStore {
 interface AuditEventStore {
     fun append(event: AuditEvent)
 
-    fun recent(tenantId: String, limit: Int = 200): List<AuditEvent>
+    fun recent(
+        tenantId: String,
+        limit: Int = 200,
+    ): List<AuditEvent>
 
-    fun verifyChain(tenantId: String, limit: Int = 10_000): AuditChainVerification
+    fun verifyChain(
+        tenantId: String,
+        limit: Int = 10_000,
+    ): AuditChainVerification
 }
 
 interface RetinalPlanStore {
     fun save(plan: RetinalPrintPlan)
 
-    fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan?
+    fun findByPlanId(
+        tenantId: String,
+        planId: String,
+    ): RetinalPrintPlan?
 
-    fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan?
+    fun findLatestByPatientId(
+        tenantId: String,
+        patientId: String,
+    ): RetinalPrintPlan?
 
-    fun findRecent(tenantId: String, limit: Int = 100): List<RetinalPrintPlan>
+    fun findRecent(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<RetinalPrintPlan>
 }
 
 interface PrintSessionStore {
@@ -84,11 +105,20 @@ interface PrintSessionStore {
         updatedAtMs: Long,
     )
 
-    fun findBySessionId(tenantId: String, sessionId: String): PrintSession?
+    fun findBySessionId(
+        tenantId: String,
+        sessionId: String,
+    ): PrintSession?
 
-    fun findActiveByPrinterId(tenantId: String, printerId: String): PrintSession?
+    fun findActiveByPrinterId(
+        tenantId: String,
+        printerId: String,
+    ): PrintSession?
 
-    fun findActive(tenantId: String, limit: Int = 100): List<PrintSession>
+    fun findActive(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<PrintSession>
 }
 
 interface LatencyBreachStore {

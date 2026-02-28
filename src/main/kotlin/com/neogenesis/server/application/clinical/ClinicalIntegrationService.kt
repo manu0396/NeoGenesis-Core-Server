@@ -155,7 +155,10 @@ class ClinicalIntegrationService(
         return document
     }
 
-    fun recent(tenantId: String, limit: Int = 100): List<ClinicalDocument> = clinicalDocumentStore.recent(tenantId, limit)
+    fun recent(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<ClinicalDocument> = clinicalDocumentStore.recent(tenantId, limit)
 
     fun findByPatientId(
         tenantId: String,

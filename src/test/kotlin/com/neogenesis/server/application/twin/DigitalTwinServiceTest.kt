@@ -46,10 +46,11 @@ class DigitalTwinServiceTest {
             store[state.printerId] = state
         }
 
-        override fun findByPrinterId(tenantId: String, printerId: String): DigitalTwinState? =
-            store[printerId]?.takeIf { it.tenantId == tenantId }
+        override fun findByPrinterId(
+            tenantId: String,
+            printerId: String,
+        ): DigitalTwinState? = store[printerId]?.takeIf { it.tenantId == tenantId }
 
-        override fun findAll(tenantId: String): List<DigitalTwinState> =
-            store.values.filter { it.tenantId == tenantId }
+        override fun findAll(tenantId: String): List<DigitalTwinState> = store.values.filter { it.tenantId == tenantId }
     }
 }
