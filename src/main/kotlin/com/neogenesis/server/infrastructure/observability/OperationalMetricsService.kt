@@ -34,7 +34,24 @@ class OperationalMetricsService(
 
     fun recordAuthzDenied() {
         Counter.builder("neogenesis_authz_denied_total")
-            .description("Total authorization denied events")
+            .description("Total authorization denied events (RBAC)")
+            .register(meterRegistry)
+            .increment()
+    }
+
+    fun recordAbacDecision(action: String, decision: String) {
+        Counter.builder("neogenesis_abac_decisions_total")
+            .description("Total attribute-based access control decisions")
+            .tag("action", action)
+            .tag("decision", decision)
+            .register(meterRegistry)
+            .increment()
+    }
+
+    fun recordTenantActive(tenantId: String) {
+        Counter.builder("neogenesis_tenant_activity_total")
+            .description("Total activity events per tenant")
+            .tag("tenant", tenantId)
             .register(meterRegistry)
             .increment()
     }

@@ -98,6 +98,42 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.statuspages.StatusPages
+import com.neogenesis.server.application.security.DefaultAbacPolicyEngine
+import com.neogenesis.server.infrastructure.security.configureRateLimiting
+import com.neogenesis.server.infrastructure.security.configureTenantIsolation
+import com.neogenesis.server.presentation.http.clinicalRoutes
+import com.neogenesis.server.presentation.http.complianceRoutes
+import com.neogenesis.server.presentation.http.digitalTwinRoutes
+import com.neogenesis.server.presentation.http.gdprRoutes
+import com.neogenesis.server.presentation.http.healthRoutes
+import com.neogenesis.server.presentation.http.qualityRoutes
+import com.neogenesis.server.application.quality.QualityScoringService
+import com.neogenesis.server.presentation.http.printSessionRoutes
+import com.neogenesis.server.presentation.http.regulatoryRoutes
+import com.neogenesis.server.presentation.http.retinaRoutes
+import com.neogenesis.server.presentation.http.sreRoutes
+import com.neogenesis.server.presentation.http.telemetryRoutes
+import com.neogenesis.server.application.clinical.ClinicalDimseService
+import com.neogenesis.server.application.clinical.ClinicalIntegrationService
+import com.neogenesis.server.application.clinical.ClinicalPacsService
+import com.neogenesis.server.application.clinical.ClinicalValidationService
+import com.neogenesis.server.application.clinical.FhirCohortAnalyticsService
+import com.neogenesis.server.application.clinical.Hl7MllpGatewayService
+import com.neogenesis.server.application.compliance.ComplianceTraceabilityService
+import com.neogenesis.server.application.compliance.GdprService
+import com.neogenesis.server.application.compliance.RegulatoryComplianceService
+import com.neogenesis.server.application.resilience.IntegrationResilienceExecutor
+import com.neogenesis.server.application.resilience.RequestIdempotencyService
+import com.neogenesis.server.application.retina.RetinalPlanningService
+import com.neogenesis.server.application.session.PrintSessionService
+import com.neogenesis.server.infrastructure.clinical.Hl7MllpClient
+import com.neogenesis.server.infrastructure.persistence.JdbcClinicalDocumentStore
+import com.neogenesis.server.infrastructure.persistence.JdbcGdprStore
+import com.neogenesis.server.infrastructure.persistence.JdbcRegulatoryStore
+import com.neogenesis.server.infrastructure.persistence.JdbcRequestIdempotencyStore
+import com.neogenesis.server.application.serverless.ServerlessDispatchService
+import com.neogenesis.server.application.serverless.OutboxRetryPolicy
+import com.neogenesis.server.application.serverless.PublishResult
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
@@ -221,6 +257,11 @@ fun Application.module() {
                 MDC.put("traceId", call.callId ?: "missing-trace-id")
                 MDC.put("correlationId", call.callId ?: "missing-correlation-id")
                 MDC.put("endpoint", "${call.request.httpMethod.value} ${call.request.path()}")
+                
+                val runId = call.parameters["runId"] ?: call.parameters["sessionId"] ?: call.request.headers["X-Run-Id"]
+                if (runId != null) {
+                    MDC.put("runId", runId)
+                }
             }
             onCallRespond { call, _ ->
                 val elapsed = System.currentTimeMillis() - call.attributes[startedAt]
@@ -353,53 +394,118 @@ fun Application.module() {
     }
 
     configureAuthentication(resolvedSecurityConfig.jwt, jwtVerifier)
+    configureTenantIsolation()
+    configureRateLimiting(appConfig)
+
+    val abacPolicyEngine = DefaultAbacPolicyEngine()
+
+    // Dependency Graph for Clean Routes
+    val cleanTelemetrySnapshotService = InMemoryTelemetrySnapshotService()
+    val cleanTelemetryEventStore = JdbcTelemetryEventStore(dataSource)
+    val cleanControlCommandStore = JdbcControlCommandStore(dataSource)
+    val cleanDigitalTwinStore = JdbcDigitalTwinStore(dataSource)
+    val cleanLatencyBreachStore = JdbcLatencyBreachStore(dataSource)
+    val cleanLatencyBudgetService =
+        LatencyBudgetService(
+            thresholdMs = appConfig.control.latencyBudgetMs,
+            latencyBreachStore = cleanLatencyBreachStore,
+            auditTrailService = auditTrailService,
+            metricsService = operationalMetrics,
+        )
+
+    val cleanRetinalPlanStore = JdbcRetinalPlanStore(dataSource)
+    val cleanPrintSessionStore = JdbcPrintSessionStore(dataSource)
+
+    val cleanClosedLoopControlService =
+        ClosedLoopControlService(
+            decisionService = ControlDecisionService(DefaultTelemetrySafetyPolicy()),
+            printSessionStore = cleanPrintSessionStore,
+            retinalPlanStore = cleanRetinalPlanStore,
+        )
+    val cleanTelemetryProcessingService =
+        TelemetryProcessingService(
+            closedLoopControlService = cleanClosedLoopControlService,
+            advancedBioSimulationService = AdvancedBioSimulationService(),
+            telemetrySnapshotService = cleanTelemetrySnapshotService,
+            telemetryEventStore = cleanTelemetryEventStore,
+            controlCommandStore = cleanControlCommandStore,
+            digitalTwinService = DigitalTwinService(cleanDigitalTwinStore),
+            auditTrailService = auditTrailService,
+            metricsService = operationalMetrics,
+            latencyBudgetService = cleanLatencyBudgetService,
+        )
+
+    val cleanResilienceExecutor = IntegrationResilienceExecutor(
+        appConfig.resilience.enabled,
+        appConfig.resilience.integrationTimeoutMs,
+        appConfig.resilience.circuitBreakerFailureThreshold,
+        appConfig.resilience.circuitBreakerOpenStateMs,
+        operationalMetrics
+    )
+    val cleanGdprService = GdprService(JdbcGdprStore(dataSource), auditTrailService, appConfig.gdpr)
+    
+    val cleanOutboxStore = com.neogenesis.server.infrastructure.persistence.JdbcOutboxEventStore(dataSource)
+    val cleanServerlessDispatchService = ServerlessDispatchService(
+        outboxEventStore = cleanOutboxStore,
+        metricsService = operationalMetrics,
+        outboxEventPublisher = { PublishResult.Success }, // Default logging publisher
+        retryPolicy = OutboxRetryPolicy(
+            maxRetries = appConfig.serverless.maxRetries,
+            baseBackoffMs = appConfig.serverless.baseBackoffMs,
+            maxBackoffMs = appConfig.serverless.maxBackoffMs
+        )
+    )
+
+    val cleanClinicalIntegrationService = ClinicalIntegrationService(
+        clinicalDocumentStore = JdbcClinicalDocumentStore(dataSource, defaultRetentionDays = appConfig.compliance.retentionDays),
+        auditTrailService = auditTrailService,
+        metricsService = operationalMetrics,
+        serverlessDispatchService = cleanServerlessDispatchService,
+        validationService = ClinicalValidationService(appConfig.clinical.validation),
+        gdprService = cleanGdprService
+    )
+    val cleanClinicalPacsService = ClinicalPacsService(
+        dicomWebClient = null,
+        clinicalIntegrationService = cleanClinicalIntegrationService,
+        metricsService = operationalMetrics,
+        resilienceExecutor = cleanResilienceExecutor
+    )
+    val cleanClinicalDimseService = ClinicalDimseService(
+        dimseClient = null,
+        resilienceExecutor = cleanResilienceExecutor
+    )
+    val cleanFhirCohortAnalyticsService = FhirCohortAnalyticsService(JdbcClinicalDocumentStore(dataSource))
+    val cleanHl7MllpGatewayService = Hl7MllpGatewayService(
+        mllpClient = Hl7MllpClient(),
+        clinicalIntegrationService = cleanClinicalIntegrationService,
+        mllpConfig = appConfig.clinical.hl7Mllp,
+        metricsService = operationalMetrics,
+        resilienceExecutor = cleanResilienceExecutor
+    )
+    val cleanIdempotencyService = RequestIdempotencyService(
+        store = JdbcRequestIdempotencyStore(dataSource),
+        metricsService = operationalMetrics,
+        ttlSeconds = appConfig.resilience.idempotencyTtlSeconds
+    )
+    val cleanRetinalPlanningService = RetinalPlanningService(cleanRetinalPlanStore, auditTrailService, operationalMetrics)
+    val cleanPrintSessionService = PrintSessionService(cleanPrintSessionStore, auditTrailService, operationalMetrics)
+    val cleanRegulatoryComplianceService = RegulatoryComplianceService(JdbcRegulatoryStore(dataSource), auditTrailService, operationalMetrics)
+    val cleanQualityScoringService = QualityScoringService()
+    val cleanTraceabilityService = ComplianceTraceabilityService.fromClasspath()
 
     val grpcRuntime =
         if (!appConfig.env.equals("test", ignoreCase = true)) {
             try {
-                val telemetrySnapshotService = InMemoryTelemetrySnapshotService()
-                val telemetryEventStore = JdbcTelemetryEventStore(dataSource)
-                val controlCommandStore = JdbcControlCommandStore(dataSource)
-                val digitalTwinStore = JdbcDigitalTwinStore(dataSource)
-                val latencyBreachStore = JdbcLatencyBreachStore(dataSource)
-                val latencyBudgetService =
-                    LatencyBudgetService(
-                        thresholdMs = appConfig.control.latencyBudgetMs,
-                        latencyBreachStore = latencyBreachStore,
-                        auditTrailService = auditTrailService,
-                        metricsService = operationalMetrics,
-                    )
-
-                val retinalPlanStore = JdbcRetinalPlanStore(dataSource)
-                val printSessionStore = JdbcPrintSessionStore(dataSource)
-
-                val closedLoopControlService =
-                    ClosedLoopControlService(
-                        decisionService = ControlDecisionService(DefaultTelemetrySafetyPolicy()),
-                        printSessionStore = printSessionStore,
-                        retinalPlanStore = retinalPlanStore,
-                    )
-                val telemetryProcessingService =
-                    TelemetryProcessingService(
-                        closedLoopControlService = closedLoopControlService,
-                        advancedBioSimulationService = AdvancedBioSimulationService(),
-                        telemetrySnapshotService = telemetrySnapshotService,
-                        telemetryEventStore = telemetryEventStore,
-                        controlCommandStore = controlCommandStore,
-                        digitalTwinService = DigitalTwinService(digitalTwinStore),
-                        auditTrailService = auditTrailService,
-                        metricsService = operationalMetrics,
-                        latencyBudgetService = latencyBudgetService,
-                    )
-
                 val jwtAuthInterceptor = GrpcJwtAuthInterceptor(jwtVerifier)
+                val tenantInterceptor = com.neogenesis.server.infrastructure.grpc.GrpcTenantInterceptor()
                 val tracingInterceptor = GrpcCorrelationTracingInterceptor(openTelemetry)
 
-                val grpcService = BioPrintGrpcService(telemetryProcessingService)
+                val grpcService = BioPrintGrpcService(cleanTelemetryProcessingService)
                 val bioPrintServiceDefinition =
                     ServerInterceptors.intercept(
                         grpcService,
                         jwtAuthInterceptor,
+                        tenantInterceptor,
                         tracingInterceptor,
                     )
 
@@ -407,24 +513,28 @@ fun Application.module() {
                     ServerInterceptors.intercept(
                         RegenProtocolGrpcService(regenOpsService),
                         jwtAuthInterceptor,
+                        tenantInterceptor,
                         tracingInterceptor,
                     )
                 val runServiceDefinition =
                     ServerInterceptors.intercept(
                         RegenRunGrpcService(regenOpsService),
                         jwtAuthInterceptor,
+                        tenantInterceptor,
                         tracingInterceptor,
                     )
                 val gatewayServiceDefinition =
                     ServerInterceptors.intercept(
                         RegenGatewayGrpcService(regenOpsService),
                         jwtAuthInterceptor,
+                        tenantInterceptor,
                         tracingInterceptor,
                     )
                 val metricsServiceDefinition =
                     ServerInterceptors.intercept(
                         RegenMetricsGrpcService(regenOpsService),
                         jwtAuthInterceptor,
+                        tenantInterceptor,
                         tracingInterceptor,
                     )
 
@@ -574,11 +684,69 @@ fun Application.module() {
             auditLogRepository = auditLogRepository,
             metrics = metrics,
         )
+
+        // Clean Architecture Routes
+        healthRoutes(
+            grpcPort = appConfig.grpcPort,
+            traceabilityService = cleanTraceabilityService,
+            dataSource = dataSource
+        )
+        telemetryRoutes(
+            telemetrySnapshotService = cleanTelemetrySnapshotService,
+            telemetryEventStore = cleanTelemetryEventStore,
+            controlCommandStore = cleanControlCommandStore,
+            telemetryProcessingService = cleanTelemetryProcessingService,
+            metricsService = operationalMetrics,
+            abacPolicyEngine = abacPolicyEngine
+        )
+        digitalTwinRoutes(
+            digitalTwinService = DigitalTwinService(cleanDigitalTwinStore),
+            metricsService = operationalMetrics
+        )
+        clinicalRoutes(
+            clinicalIntegrationService = cleanClinicalIntegrationService,
+            clinicalPacsService = cleanClinicalPacsService,
+            clinicalDimseService = cleanClinicalDimseService,
+            fhirCohortAnalyticsService = cleanFhirCohortAnalyticsService,
+            hl7MllpGatewayService = cleanHl7MllpGatewayService,
+            idempotencyService = cleanIdempotencyService,
+            requireIdempotencyKey = appConfig.resilience.requireIdempotencyKey,
+            metricsService = operationalMetrics,
+            abacPolicyEngine = abacPolicyEngine
+        )
+        retinaRoutes(
+            retinalPlanningService = cleanRetinalPlanningService,
+            metricsService = operationalMetrics
+        )
+        printSessionRoutes(
+            printSessionService = cleanPrintSessionService,
+            metricsService = operationalMetrics
+        )
+        complianceRoutes(
+            traceabilityService = cleanTraceabilityService,
+            auditTrailService = auditTrailService,
+            metricsService = operationalMetrics,
+            billingService = billingService
+        )
+        regulatoryRoutes(
+            regulatoryComplianceService = cleanRegulatoryComplianceService,
+            metricsService = operationalMetrics,
+            abacPolicyEngine = abacPolicyEngine
+        )
+        gdprRoutes(
+            gdprService = cleanGdprService,
+            metricsService = operationalMetrics
+        )
+        qualityRoutes(
+            qualityScoringService = cleanQualityScoringService,
+            telemetryEventStore = cleanTelemetryEventStore,
+            metricsService = operationalMetrics
+        )
     }
 }
 
 private fun clearMdc() {
-    listOf("env", "service", "version", "traceId", "userId", "endpoint", "status", "durationMs").forEach {
+    listOf("env", "service", "version", "traceId", "correlationId", "userId", "tenantId", "runId", "endpoint", "status", "durationMs").forEach {
         MDC.remove(it)
     }
 }

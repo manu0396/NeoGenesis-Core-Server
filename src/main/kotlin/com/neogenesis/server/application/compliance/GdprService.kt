@@ -14,6 +14,7 @@ class GdprService(
     private val gdprConfig: AppConfig.GdprConfig,
 ) {
     fun grantConsent(
+        tenantId: String,
         patientId: String,
         purpose: String,
         legalBasis: String,
@@ -21,6 +22,7 @@ class GdprService(
     ): GdprConsentRecord {
         val record =
             GdprConsentRecord(
+                tenantId = tenantId,
                 patientId = patientId,
                 purpose = purpose,
                 status = ConsentStatus.GRANTED,
@@ -30,6 +32,7 @@ class GdprService(
         gdprStore.appendConsent(record)
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "gdpr.consent.grant",
                 resourceType = "patient",
@@ -43,6 +46,7 @@ class GdprService(
     }
 
     fun revokeConsent(
+        tenantId: String,
         patientId: String,
         purpose: String,
         legalBasis: String,
@@ -50,6 +54,7 @@ class GdprService(
     ): GdprConsentRecord {
         val record =
             GdprConsentRecord(
+                tenantId = tenantId,
                 patientId = patientId,
                 purpose = purpose,
                 status = ConsentStatus.REVOKED,
@@ -59,6 +64,7 @@ class GdprService(
         gdprStore.appendConsent(record)
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "gdpr.consent.revoke",
                 resourceType = "patient",
@@ -72,24 +78,27 @@ class GdprService(
     }
 
     fun hasActiveConsent(
+        tenantId: String,
         patientId: String,
         purpose: String,
     ): Boolean {
         if (!gdprConfig.enforceConsent) {
             return true
         }
-        val latest = gdprStore.latestConsent(patientId, purpose) ?: return false
+        val latest = gdprStore.latestConsent(tenantId, patientId, purpose) ?: return false
         return latest.status == ConsentStatus.GRANTED
     }
 
     fun recordErasure(
+        tenantId: String,
         patientId: String,
         reason: String,
         actor: String,
     ): GdprErasureRecord {
-        val affected = gdprStore.anonymizeClinicalDocuments(patientId)
+        val affected = gdprStore.anonymizeClinicalDocuments(tenantId, patientId)
         val record =
             GdprErasureRecord(
+                tenantId = tenantId,
                 patientId = patientId,
                 requestedBy = actor,
                 reason = reason,
@@ -99,6 +108,7 @@ class GdprService(
         gdprStore.appendErasure(record)
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "gdpr.erasure.execute",
                 resourceType = "patient",
@@ -111,12 +121,13 @@ class GdprService(
         return record
     }
 
-    fun recentErasures(limit: Int): List<GdprErasureRecord> = gdprStore.recentErasures(limit)
+    fun recentErasures(tenantId: String, limit: Int): List<GdprErasureRecord> = gdprStore.recentErasures(tenantId, limit)
 
-    fun enforceRetention(actor: String): Int {
-        val affected = gdprStore.anonymizeExpiredClinicalDocuments()
+    fun enforceRetention(tenantId: String, actor: String): Int {
+        val affected = gdprStore.anonymizeExpiredClinicalDocuments(tenantId)
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "gdpr.retention.enforce",
                 resourceType = "clinical_document",

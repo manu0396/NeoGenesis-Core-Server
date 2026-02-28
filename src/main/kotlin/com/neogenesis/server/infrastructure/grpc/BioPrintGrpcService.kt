@@ -19,14 +19,18 @@ class BioPrintGrpcService(
     private val telemetryProcessingService: TelemetryProcessingService,
 ) : BioPrintServiceGrpcKt.BioPrintServiceCoroutineImplBase() {
     override fun streamTelemetryAndControl(requests: Flow<PrinterTelemetry>): Flow<KinematicCommand> {
+        val principal = GrpcAuthContextKeys.principal.get() ?: GrpcPrincipal("system", setOf("system"), "default", null)
+        val tenantId = principal.tenantId ?: "default"
+
         return requests.map { telemetry ->
             try {
                 val state = telemetry.toDomain()
                 val result =
                     telemetryProcessingService.process(
+                        tenantId = tenantId,
                         telemetry = state,
                         source = "grpc",
-                        actor = "grpc-client",
+                        actor = principal.subject,
                     )
                 result.command.toGrpc(state)
             } catch (error: Throwable) {

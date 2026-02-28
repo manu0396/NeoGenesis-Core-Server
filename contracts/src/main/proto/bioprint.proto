@@ -166,6 +166,9 @@ message PublishVersionRequest {
     string actor_id = 3;
     string changelog = 4;
     optional string correlation_id = 5;
+    optional string ticket_link = 6;
+    optional string justification = 7;
+    optional string e_signature = 8;
 }
 
 message ListProtocolsRequest {

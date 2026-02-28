@@ -83,11 +83,14 @@ class RegenProtocolGrpcService(
     override suspend fun publishVersion(request: PublishVersionRequest): ProtocolVersionRecord {
         return grpcCall {
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
+            val tenantId = resolveTenant(request.tenantId, principal)
+            
             service.publishVersion(
-                tenantId = resolveTenant(request.tenantId, principal),
+                tenantId = tenantId,
                 protocolId = request.protocolId,
                 actorId = resolveActor(request.actorId, principal),
                 changelog = request.changelog,
+                signature = null // Will be handled by ESignatureService if needed
             ).toGrpc()
         }
     }

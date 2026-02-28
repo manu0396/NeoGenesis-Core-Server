@@ -5,6 +5,7 @@ import com.neogenesis.server.infrastructure.persistence.CanonicalRole
 import com.neogenesis.server.infrastructure.persistence.DeviceRepository
 import com.neogenesis.server.infrastructure.persistence.JobRepository
 import com.neogenesis.server.infrastructure.security.enforceRole
+import com.neogenesis.server.infrastructure.security.tenantId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
@@ -32,14 +33,14 @@ fun Route.jobsModule(
                     throw ApiException("invalid_request", "Job id and deviceId are required", HttpStatusCode.BadRequest)
                 }
                 val device =
-                    deviceRepository.find(request.deviceId.trim())
+                    deviceRepository.find(call.tenantId(), request.deviceId.trim())
                         ?: throw ApiException("device_not_found", "Device not found", HttpStatusCode.NotFound)
 
                 val job =
                     jobRepository.create(
                         id = request.id.trim(),
                         deviceId = device.id,
-                        tenantId = request.tenantId?.trim()?.ifBlank { null },
+                        tenantId = request.tenantId?.trim()?.ifBlank { null } ?: call.tenantId(),
                         status = "CREATED",
                     )
                 auditLogRepository.append(
@@ -62,7 +63,7 @@ fun Route.jobsModule(
             get {
                 call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR, CanonicalRole.AUDITOR, CanonicalRole.INTEGRATION)
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-                call.respond(jobRepository.list(limit).map { it.toResponse() })
+                call.respond(jobRepository.list(call.tenantId(), limit).map { it.toResponse() })
             }
         }
 
@@ -73,7 +74,7 @@ fun Route.jobsModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(call.tenantId(), jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             call.respond(HttpStatusCode.OK, job.toResponse())
         }
@@ -90,7 +91,7 @@ fun Route.jobsModule(
                 throw ApiException("invalid_status", "Unsupported job status", HttpStatusCode.BadRequest)
             }
             val updated =
-                jobRepository.updateStatus(jobId, status)
+                jobRepository.updateStatus(call.tenantId(), jobId, status)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
 
             auditLogRepository.append(

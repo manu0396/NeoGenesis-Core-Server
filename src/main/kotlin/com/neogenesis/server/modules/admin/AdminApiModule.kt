@@ -389,6 +389,7 @@ private fun audit(
     }
     auditTrailService.record(
         AuditEvent(
+            tenantId = tenantId,
             actor = context.actorId,
             action = action,
             resourceType = "admin_api",
@@ -414,6 +415,7 @@ private fun auditMutation(
 ) {
     auditTrailService.record(
         AuditEvent(
+            tenantId = context.tenantId,
             actor = context.actorId,
             action = action,
             resourceType = resourceType,

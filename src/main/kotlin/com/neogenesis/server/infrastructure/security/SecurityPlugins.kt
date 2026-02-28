@@ -1,9 +1,13 @@
 package com.neogenesis.server.infrastructure.security
 
 import com.auth0.jwt.JWTVerifier
+import com.neogenesis.server.application.security.AbacContext
+import com.neogenesis.server.application.security.AbacDecision
+import com.neogenesis.server.application.security.AbacPolicyEngine
 import com.neogenesis.server.infrastructure.config.AppConfig
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
 import com.neogenesis.server.infrastructure.persistence.CanonicalRole
+import com.neogenesis.server.infrastructure.persistence.TenantContext
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
@@ -15,8 +19,11 @@ import io.ktor.server.auth.AuthenticationChecked
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.auth.principal
+import io.ktor.server.plugins.ratelimit.RateLimit
+import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.request.path
 import io.ktor.server.routing.Route
+import kotlin.time.Duration.Companion.minutes
 
 class SecurityPluginException(
     val status: HttpStatusCode,
@@ -104,9 +111,99 @@ fun Application.configureHttpProxyMutualTlsValidation(
     )
 }
 
+fun Application.configureTenantIsolation() {
+    install(createApplicationPlugin("TenantIsolation") {
+        onCall { call ->
+            val principal = call.principal<NeoGenesisPrincipal>()
+            if (principal != null) {
+                val tenantId = principal.tenantId ?: "default"
+                TenantContext.set(tenantId)
+                org.slf4j.MDC.put("tenantId", tenantId)
+            }
+        }
+    })
+}
+
+fun Application.configureRateLimiting(appConfig: AppConfig) {
+    install(RateLimit) {
+        register(RateLimitName("tenant-write")) {
+            rateLimiter(limit = appConfig.rateLimits.telemetryWritesPerMinute, refillPeriod = 1.minutes)
+            requestKey { call -> call.tenantId() }
+        }
+        register(RateLimitName("auth")) {
+            rateLimiter(limit = appConfig.rateLimits.authAttemptsPerMinute, refillPeriod = 1.minutes)
+            requestKey { call -> call.request.local.remoteAddress }
+        }
+    }
+}
+
 private class RoleAuthorizationConfig {
     var requiredRoles: Set<String> = emptySet()
     lateinit var metricsService: OperationalMetricsService
+}
+
+private class AbacAuthorizationConfig {
+    lateinit var abacPolicyEngine: AbacPolicyEngine
+    lateinit var metricsService: OperationalMetricsService
+    lateinit var action: String
+    lateinit var resourceType: String
+    var getResourceId: (ApplicationCall) -> String? = { it.parameters["id"] }
+    var getAttributes: (ApplicationCall) -> Map<String, Any> = { emptyMap() }
+}
+
+private val AbacAuthorizationPlugin =
+    createRouteScopedPlugin(
+        name = "AbacAuthorizationPlugin",
+        createConfiguration = ::AbacAuthorizationConfig,
+    ) {
+        val policyEngine = pluginConfig.abacPolicyEngine
+        val metricsService = pluginConfig.metricsService
+        val action = pluginConfig.action
+        val resourceType = pluginConfig.resourceType
+        val getResourceId = pluginConfig.getResourceId
+        val getAttributes = pluginConfig.getAttributes
+
+        on(AuthenticationChecked) { call ->
+            val principal = call.principal<NeoGenesisPrincipal>() ?: return@on
+            
+            val context = AbacContext(
+                principal = principal,
+                action = action,
+                resourceType = resourceType,
+                resourceId = getResourceId(call),
+                attributes = getAttributes(call) + mapOf("tenant_id" to call.tenantId())
+            )
+            
+            val decision = policyEngine.decide(context)
+            metricsService.recordAbacDecision(action, decision.name)
+            
+            if (decision == AbacDecision.DENY) {
+                throw SecurityPluginException(
+                    status = HttpStatusCode.Forbidden,
+                    code = "abac_denied",
+                )
+            }
+        }
+    }
+
+fun Route.withAbac(
+    action: String,
+    resourceType: String,
+    abacPolicyEngine: AbacPolicyEngine,
+    metricsService: OperationalMetricsService,
+    getResourceId: (ApplicationCall) -> String? = { it.parameters["id"] },
+    getAttributes: (ApplicationCall) -> Map<String, Any> = { emptyMap() },
+    build: Route.() -> Unit,
+) {
+    install(AbacAuthorizationPlugin) {
+        this.abacPolicyEngine = abacPolicyEngine
+        this.metricsService = metricsService
+        this.action = action
+        this.resourceType = resourceType
+        this.getResourceId = getResourceId
+        this.getAttributes = getAttributes
+    }
+    build()
 }
 
 private val RoleAuthorizationPlugin =
@@ -152,6 +249,10 @@ fun Route.secured(
 
 fun ApplicationCall.actor(): String {
     return principal<NeoGenesisPrincipal>()?.subject ?: "system"
+}
+
+fun ApplicationCall.tenantId(): String {
+    return principal<NeoGenesisPrincipal>()?.tenantId ?: "default"
 }
 
 fun ApplicationCall.requireRole(vararg requiredRoles: CanonicalRole): NeoGenesisPrincipal {

@@ -4,6 +4,7 @@ import com.neogenesis.server.infrastructure.persistence.AuditLogRepository
 import com.neogenesis.server.infrastructure.persistence.CanonicalRole
 import com.neogenesis.server.infrastructure.persistence.DeviceRepository
 import com.neogenesis.server.infrastructure.security.enforceRole
+import com.neogenesis.server.infrastructure.security.tenantId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
@@ -33,7 +34,7 @@ fun Route.devicesModule(
                 val device =
                     deviceRepository.create(
                         id = request.id.trim(),
-                        tenantId = request.tenantId?.trim()?.ifBlank { null },
+                        tenantId = request.tenantId?.trim()?.ifBlank { null } ?: call.tenantId(),
                         name = request.name.trim(),
                     )
 
@@ -57,7 +58,7 @@ fun Route.devicesModule(
             get {
                 call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR, CanonicalRole.AUDITOR, CanonicalRole.INTEGRATION)
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-                val devices = deviceRepository.list(limit).map { it.toResponse() }
+                val devices = deviceRepository.list(call.tenantId(), limit).map { it.toResponse() }
                 call.respond(HttpStatusCode.OK, devices)
             }
         }

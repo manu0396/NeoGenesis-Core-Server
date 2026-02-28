@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class LatencyBreachEvent(
+    val tenantId: String,
     val printerId: String,
     val source: String,
     val durationMs: Double,

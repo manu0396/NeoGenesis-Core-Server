@@ -10,6 +10,7 @@ enum class ControlActionType {
 }
 
 data class ControlCommand(
+    val tenantId: String,
     val commandId: String,
     val printerId: String,
     val actionType: ControlActionType,

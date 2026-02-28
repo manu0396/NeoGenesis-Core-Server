@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class RiskRecord(
+    val tenantId: String,
     val riskId: String,
     val hazardDescription: String,
     val severity: Int,

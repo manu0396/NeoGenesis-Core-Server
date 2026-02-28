@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class DigitalTwinState(
+    val tenantId: String,
     val printerId: String,
     val updatedAtMs: Long,
     val currentViability: Float,

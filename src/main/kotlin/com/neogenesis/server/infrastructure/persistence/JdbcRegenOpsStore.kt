@@ -40,10 +40,21 @@ import java.time.Instant
 import javax.sql.DataSource
 
 class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
+    private fun Connection.setTenant(tenantId: String) {
+        val isPostgres = metaData.databaseProductName.contains("PostgreSQL", ignoreCase = true)
+        if (isPostgres) {
+            prepareStatement("SET LOCAL app.current_tenant = ?").use { s ->
+                s.setString(1, tenantId)
+                s.execute()
+            }
+        }
+    }
+
     override fun createDraft(tenantId: String, protocolId: String, title: String, contentJson: String, updatedBy: String): RegenProtocolDraft {
         val now = Timestamp.from(Instant.now())
         try {
-            dataSource.connection.use { c ->
+            dataSource.inTransaction { c ->
+                c.setTenant(tenantId)
                 c.prepareStatement("INSERT INTO regen_protocol_drafts(tenant_id,protocol_id,title,content_json,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").use { s ->
                     s.setString(1, tenantId); s.setString(2, protocolId); s.setString(3, title)
                     s.setString(4, canonicalizeJson(contentJson)); s.setString(5, updatedBy)
@@ -58,7 +69,8 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
     }
 
     override fun updateDraft(tenantId: String, protocolId: String, title: String, contentJson: String, updatedBy: String): RegenProtocolDraft {
-        val rows = dataSource.connection.use { c ->
+        val rows = dataSource.inTransaction { c ->
+            c.setTenant(tenantId)
             c.prepareStatement("UPDATE regen_protocol_drafts SET title=?,content_json=?,updated_by=?,updated_at=? WHERE tenant_id=? AND protocol_id=?").use { s ->
                 s.setString(1, title); s.setString(2, canonicalizeJson(contentJson)); s.setString(3, updatedBy)
                 s.setTimestamp(4, Timestamp.from(Instant.now())); s.setString(5, tenantId); s.setString(6, protocolId)
@@ -70,11 +82,12 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
     }
 
     override fun getDraft(tenantId: String, protocolId: String): RegenProtocolDraft? {
-        return dataSource.connection.use { c ->
+        return dataSource.inTransaction { c ->
+            c.setTenant(tenantId)
             c.prepareStatement("SELECT tenant_id,protocol_id,title,content_json,updated_by,created_at,updated_at FROM regen_protocol_drafts WHERE tenant_id=? AND protocol_id=?").use { s ->
                 s.setString(1, tenantId); s.setString(2, protocolId)
                 s.executeQuery().use { rs ->
-                    if (!rs.next()) return null
+                    if (!rs.next()) return@inTransaction null
                     RegenProtocolDraft(
                         tenantId = rs.getString("tenant_id"), protocolId = rs.getString("protocol_id"), title = rs.getString("title"),
                         contentJson = rs.getString("content_json"), updatedBy = rs.getString("updated_by"),
@@ -86,7 +99,8 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
     }
 
     override fun nextProtocolVersion(tenantId: String, protocolId: String): Int {
-        return dataSource.connection.use { c ->
+        return dataSource.inTransaction { c ->
+            c.setTenant(tenantId)
             c.prepareStatement("SELECT COALESCE(MAX(version),0) latest FROM regen_protocol_versions WHERE tenant_id=? AND protocol_id=?").use { s ->
                 s.setString(1, tenantId); s.setString(2, protocolId)
                 s.executeQuery().use { rs -> rs.next(); rs.getInt("latest") + 1 }
@@ -95,7 +109,8 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
     }
 
     override fun insertProtocolVersion(tenantId: String, protocolId: String, version: Int, title: String, contentJson: String, publishedBy: String, changelog: String): RegenProtocolVersion {
-        dataSource.connection.use { c ->
+        dataSource.inTransaction { c ->
+            c.setTenant(tenantId)
             c.prepareStatement("INSERT INTO regen_protocol_versions(tenant_id,protocol_id,version,title,content_json,published_by,changelog,created_at) VALUES (?,?,?,?,?,?,?,?)").use { s ->
                 s.setString(1, tenantId); s.setString(2, protocolId); s.setInt(3, version); s.setString(4, title)
                 s.setString(5, canonicalizeJson(contentJson)); s.setString(6, publishedBy); s.setString(7, changelog)
@@ -106,7 +121,8 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
     }
 
     override fun getProtocolVersion(tenantId: String, protocolId: String, version: Int): RegenProtocolVersion? {
-        return dataSource.connection.use { c ->
+        return dataSource.inTransaction { c ->
+            c.setTenant(tenantId)
             c.prepareStatement("SELECT tenant_id,protocol_id,version,title,content_json,published_by,changelog,created_at FROM regen_protocol_versions WHERE tenant_id=? AND protocol_id=? AND version=?").use { s ->
                 s.setString(1, tenantId); s.setString(2, protocolId); s.setInt(3, version)
                 s.executeQuery().use { rs -> if (!rs.next()) null else rs.toProtocolVersion() }
@@ -115,7 +131,8 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
     }
 
     override fun listProtocols(tenantId: String, limit: Int): List<RegenProtocolSummary> {
-        return dataSource.connection.use { c ->
+        return dataSource.inTransaction { c ->
+            c.setTenant(tenantId)
             c.prepareStatement(
                 "SELECT d.tenant_id,d.protocol_id,d.title,COALESCE(v.latest_version,0) latest_version,TRUE has_draft,d.updated_at updated_at FROM regen_protocol_drafts d LEFT JOIN (SELECT tenant_id,protocol_id,MAX(version) latest_version FROM regen_protocol_versions GROUP BY tenant_id,protocol_id) v ON v.tenant_id=d.tenant_id AND v.protocol_id=d.protocol_id WHERE d.tenant_id=? UNION ALL SELECT pv.tenant_id,pv.protocol_id,pv.title,pv.version latest_version,FALSE has_draft,pv.created_at updated_at FROM regen_protocol_versions pv INNER JOIN (SELECT tenant_id,protocol_id,MAX(version) latest_version FROM regen_protocol_versions WHERE tenant_id=? GROUP BY tenant_id,protocol_id) latest ON latest.tenant_id=pv.tenant_id AND latest.protocol_id=pv.protocol_id AND latest.latest_version=pv.version WHERE NOT EXISTS (SELECT 1 FROM regen_protocol_drafts d WHERE d.tenant_id=pv.tenant_id AND d.protocol_id=pv.protocol_id) ORDER BY updated_at DESC LIMIT ?",
             ).use { s ->
@@ -143,7 +160,8 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
         } else {
             "SELECT tenant_id,protocol_id,version,title,content_json,published_by,changelog,created_at FROM regen_protocol_versions WHERE tenant_id=? ORDER BY created_at DESC LIMIT 1"
         }
-        return dataSource.connection.use { c ->
+        return dataSource.inTransaction { c ->
+            c.setTenant(tenantId)
             c.prepareStatement(sql).use { s ->
                 s.setString(1, tenantId); if (withProtocol) s.setString(2, protocolId)
                 s.executeQuery().use { rs -> if (!rs.next()) null else rs.toProtocolVersion() }

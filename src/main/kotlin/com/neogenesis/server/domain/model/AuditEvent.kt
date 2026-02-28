@@ -1,6 +1,7 @@
 ﻿package com.neogenesis.server.domain.model
 
 data class AuditEvent(
+    val tenantId: String,
     val actor: String,
     val action: String,
     val resourceType: String,

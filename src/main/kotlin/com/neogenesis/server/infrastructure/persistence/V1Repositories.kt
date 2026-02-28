@@ -116,6 +116,7 @@ class UserRepository(private val dataSource: DataSource) {
         username: String,
         passwordHash: String,
         role: CanonicalRole = CanonicalRole.ADMIN,
+        tenantId: String? = null,
     ): UserRecord {
         return dataSource.inTransaction { connection ->
             val existingId =
@@ -146,7 +147,7 @@ class UserRepository(private val dataSource: DataSource) {
                     statement.setString(2, username)
                     statement.setString(3, passwordHash)
                     statement.setString(4, role.name)
-                    statement.setString(5, null)
+                    statement.setString(5, tenantId)
                     statement.setBoolean(6, true)
                     statement.setTimestamp(7, now)
                     statement.setTimestamp(8, now)
@@ -156,14 +157,15 @@ class UserRepository(private val dataSource: DataSource) {
                 connection.prepareStatement(
                     """
                     UPDATE users
-                    SET password_hash = ?, role = ?, is_active = TRUE, updated_at = ?
+                    SET password_hash = ?, role = ?, tenant_id = COALESCE(?, tenant_id), is_active = TRUE, updated_at = ?
                     WHERE id = ?
                     """.trimIndent(),
                 ).use { statement ->
                     statement.setString(1, passwordHash)
                     statement.setString(2, role.name)
-                    statement.setTimestamp(3, Timestamp.from(Instant.now()))
-                    statement.setString(4, userId)
+                    statement.setString(3, tenantId)
+                    statement.setTimestamp(4, Timestamp.from(Instant.now()))
+                    statement.setString(5, userId)
                     statement.executeUpdate()
                 }
             }
@@ -196,13 +198,26 @@ class UserRepository(private val dataSource: DataSource) {
 }
 
 class DeviceRepository(private val dataSource: DataSource) {
+    private fun Connection.setTenant(tenantId: String?) {
+        if (tenantId != null) {
+            val isPostgres = metaData.databaseProductName.contains("PostgreSQL", ignoreCase = true)
+            if (isPostgres) {
+                prepareStatement("SET LOCAL app.current_tenant = ?").use { s ->
+                    s.setString(1, tenantId)
+                    s.execute()
+                }
+            }
+        }
+    }
+
     fun create(
         id: String,
         tenantId: String?,
         name: String,
     ): DeviceRecord {
         val now = Instant.now()
-        dataSource.connection.use { connection ->
+        dataSource.inTransaction { connection ->
+            connection.setTenant(tenantId)
             connection.prepareStatement(
                 """
                 INSERT INTO devices(id, tenant_id, name, created_at, updated_at)
@@ -221,8 +236,9 @@ class DeviceRepository(private val dataSource: DataSource) {
         return DeviceRecord(id = id, tenantId = tenantId, name = name, createdAt = now)
     }
 
-    fun find(id: String): DeviceRecord? {
-        return dataSource.connection.use { connection ->
+    fun find(tenantId: String?, id: String): DeviceRecord? {
+        return dataSource.inTransaction { connection ->
+            connection.setTenant(tenantId)
             connection.prepareStatement(
                 """
                 SELECT id, tenant_id, name, created_at
@@ -247,8 +263,9 @@ class DeviceRepository(private val dataSource: DataSource) {
         }
     }
 
-    fun list(limit: Int): List<DeviceRecord> {
-        return dataSource.connection.use { connection ->
+    fun list(tenantId: String?, limit: Int): List<DeviceRecord> {
+        return dataSource.inTransaction { connection ->
+            connection.setTenant(tenantId)
             connection.prepareStatement(
                 """
                 SELECT id, tenant_id, name, created_at
@@ -278,6 +295,18 @@ class DeviceRepository(private val dataSource: DataSource) {
 }
 
 class JobRepository(private val dataSource: DataSource) {
+    private fun Connection.setTenant(tenantId: String?) {
+        if (tenantId != null) {
+            val isPostgres = metaData.databaseProductName.contains("PostgreSQL", ignoreCase = true)
+            if (isPostgres) {
+                prepareStatement("SET LOCAL app.current_tenant = ?").use { s ->
+                    s.setString(1, tenantId)
+                    s.execute()
+                }
+            }
+        }
+    }
+
     fun create(
         id: String,
         deviceId: String,
@@ -285,7 +314,8 @@ class JobRepository(private val dataSource: DataSource) {
         status: String = "CREATED",
     ): JobRecord {
         val now = Instant.now()
-        dataSource.connection.use { connection ->
+        dataSource.inTransaction { connection ->
+            connection.setTenant(tenantId)
             connection.prepareStatement(
                 """
                 INSERT INTO print_jobs(id, device_id, tenant_id, status, created_at, updated_at)
@@ -302,11 +332,12 @@ class JobRepository(private val dataSource: DataSource) {
                 statement.executeUpdate()
             }
         }
-        return get(id) ?: error("Failed to create print job")
+        return get(tenantId, id) ?: error("Failed to create print job")
     }
 
-    fun get(id: String): JobRecord? {
-        return dataSource.connection.use { connection ->
+    fun get(tenantId: String?, id: String): JobRecord? {
+        return dataSource.inTransaction { connection ->
+            connection.setTenant(tenantId)
             connection.prepareStatement(
                 """
                 SELECT id, device_id, tenant_id, status, created_at, updated_at
@@ -333,8 +364,9 @@ class JobRepository(private val dataSource: DataSource) {
         }
     }
 
-    fun list(limit: Int): List<JobRecord> {
-        return dataSource.connection.use { connection ->
+    fun list(tenantId: String?, limit: Int): List<JobRecord> {
+        return dataSource.inTransaction { connection ->
+            connection.setTenant(tenantId)
             connection.prepareStatement(
                 """
                 SELECT id, device_id, tenant_id, status, created_at, updated_at
@@ -365,10 +397,12 @@ class JobRepository(private val dataSource: DataSource) {
     }
 
     fun updateStatus(
+        tenantId: String?,
         id: String,
         status: String,
     ): JobRecord? {
-        dataSource.connection.use { connection ->
+        dataSource.inTransaction { connection ->
+            connection.setTenant(tenantId)
             connection.prepareStatement(
                 """
                 UPDATE print_jobs
@@ -382,7 +416,7 @@ class JobRepository(private val dataSource: DataSource) {
                 statement.executeUpdate()
             }
         }
-        return get(id)
+        return get(tenantId, id)
     }
 }
 

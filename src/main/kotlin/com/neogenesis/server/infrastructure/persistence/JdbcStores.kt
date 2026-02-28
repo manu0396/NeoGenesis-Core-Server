@@ -31,10 +31,11 @@ private val json = Json { ignoreUnknownKeys = true }
 
 class JdbcTelemetryEventStore(private val dataSource: DataSource) : TelemetryEventStore {
     override fun append(event: TelemetryEvent) {
-        dataSource.connection.use { connection ->
+        dataSource.useTenantConnection(event.tenantId) { connection ->
             connection.prepareStatement(
                 """
                 INSERT INTO telemetry_events(
+                    tenant_id,
                     printer_id,
                     timestamp_ms,
                     nozzle_temp_celsius,
@@ -49,33 +50,35 @@ class JdbcTelemetryEventStore(private val dataSource: DataSource) : TelemetryEve
                     print_job_id,
                     tissue_type,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, event.telemetry.printerId)
-                statement.setLong(2, event.telemetry.timestampMs)
-                statement.setFloat(3, event.telemetry.nozzleTempCelsius)
-                statement.setFloat(4, event.telemetry.extrusionPressureKPa)
-                statement.setFloat(5, event.telemetry.cellViabilityIndex)
-                statement.setString(6, Base64.getEncoder().encodeToString(event.telemetry.encryptedImageMatrix))
-                statement.setString(7, event.source)
-                statement.setFloat(8, event.telemetry.bioInkViscosityIndex)
-                statement.setFloat(9, event.telemetry.bioInkPh)
-                statement.setFloat(10, event.telemetry.nirIiTempCelsius)
-                statement.setFloat(11, event.telemetry.morphologicalDefectProbability)
-                statement.setString(12, event.telemetry.printJobId)
-                statement.setString(13, event.telemetry.tissueType)
-                statement.setTimestamp(14, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
+                statement.setString(1, event.tenantId)
+                statement.setString(2, event.telemetry.printerId)
+                statement.setLong(3, event.telemetry.timestampMs)
+                statement.setFloat(4, event.telemetry.nozzleTempCelsius)
+                statement.setFloat(5, event.telemetry.extrusionPressureKPa)
+                statement.setFloat(6, event.telemetry.cellViabilityIndex)
+                statement.setString(7, Base64.getEncoder().encodeToString(event.telemetry.encryptedImageMatrix))
+                statement.setString(8, event.source)
+                statement.setFloat(9, event.telemetry.bioInkViscosityIndex)
+                statement.setFloat(10, event.telemetry.bioInkPh)
+                statement.setFloat(11, event.telemetry.nirIiTempCelsius)
+                statement.setFloat(12, event.telemetry.morphologicalDefectProbability)
+                statement.setString(13, event.telemetry.printJobId)
+                statement.setString(14, event.telemetry.tissueType)
+                statement.setTimestamp(15, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
                 statement.executeUpdate()
             }
         }
     }
 
-    override fun recent(limit: Int): List<TelemetryEvent> {
-        return dataSource.connection.use { connection ->
+    override fun recent(tenantId: String, limit: Int): List<TelemetryEvent> {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     printer_id,
                     timestamp_ms,
                     nozzle_temp_celsius,
@@ -110,10 +113,11 @@ class JdbcTelemetryEventStore(private val dataSource: DataSource) : TelemetryEve
 
 class JdbcControlCommandStore(private val dataSource: DataSource) : ControlCommandStore {
     override fun append(event: ControlCommandEvent) {
-        dataSource.connection.use { connection ->
+        dataSource.useTenantConnection(event.command.tenantId) { connection ->
             connection.prepareStatement(
                 """
                 INSERT INTO control_commands(
+                    tenant_id,
                     command_id,
                     printer_id,
                     action_type,
@@ -121,26 +125,28 @@ class JdbcControlCommandStore(private val dataSource: DataSource) : ControlComma
                     adjust_speed,
                     reason,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, event.command.commandId)
-                statement.setString(2, event.command.printerId)
-                statement.setString(3, event.command.actionType.name)
-                statement.setFloat(4, event.command.adjustPressure)
-                statement.setFloat(5, event.command.adjustSpeed)
-                statement.setString(6, event.command.reason)
-                statement.setTimestamp(7, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
+                statement.setString(1, event.command.tenantId)
+                statement.setString(2, event.command.commandId)
+                statement.setString(3, event.command.printerId)
+                statement.setString(4, event.command.actionType.name)
+                statement.setFloat(5, event.command.adjustPressure)
+                statement.setFloat(6, event.command.adjustSpeed)
+                statement.setString(7, event.command.reason)
+                statement.setTimestamp(8, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
                 statement.executeUpdate()
             }
         }
     }
 
-    override fun recent(limit: Int): List<ControlCommandEvent> {
-        return dataSource.connection.use { connection ->
+    override fun recent(tenantId: String, limit: Int): List<ControlCommandEvent> {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     command_id,
                     printer_id,
                     action_type,
@@ -161,6 +167,7 @@ class JdbcControlCommandStore(private val dataSource: DataSource) : ControlComma
                                 ControlCommandEvent(
                                     command =
                                         ControlCommand(
+                                            tenantId = rs.getString("tenant_id"),
                                             commandId = rs.getString("command_id"),
                                             printerId = rs.getString("printer_id"),
                                             actionType = ControlActionType.valueOf(rs.getString("action_type")),
@@ -181,7 +188,8 @@ class JdbcControlCommandStore(private val dataSource: DataSource) : ControlComma
 
 class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStore {
     override fun upsert(state: DigitalTwinState) {
-        dataSource.connection.use { connection ->
+        val tenantId = state.tenantId
+        dataSource.useTenantConnection(tenantId) { connection ->
             val updatedRows =
                 connection.prepareStatement(
                     """
@@ -193,7 +201,7 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                         collapse_risk_score = ?,
                         recommended_action = ?,
                         confidence = ?
-                    WHERE printer_id = ?
+                    WHERE tenant_id = ? AND printer_id = ?
                     """.trimIndent(),
                 ).use { statement ->
                     statement.setLong(1, state.updatedAtMs)
@@ -202,7 +210,8 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                     statement.setFloat(4, state.collapseRiskScore)
                     statement.setString(5, state.recommendedAction.name)
                     statement.setFloat(6, state.confidence)
-                    statement.setString(7, state.printerId)
+                    statement.setString(7, tenantId)
+                    statement.setString(8, state.printerId)
                     statement.executeUpdate()
                 }
 
@@ -210,6 +219,7 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                 connection.prepareStatement(
                     """
                     INSERT INTO digital_twin_snapshots(
+                        tenant_id,
                         printer_id,
                         updated_at_ms,
                         current_viability,
@@ -217,27 +227,29 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                         collapse_risk_score,
                         recommended_action,
                         confidence
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """.trimIndent(),
                 ).use { statement ->
-                    statement.setString(1, state.printerId)
-                    statement.setLong(2, state.updatedAtMs)
-                    statement.setFloat(3, state.currentViability)
-                    statement.setFloat(4, state.predictedViability5m)
-                    statement.setFloat(5, state.collapseRiskScore)
-                    statement.setString(6, state.recommendedAction.name)
-                    statement.setFloat(7, state.confidence)
+                    statement.setString(1, tenantId)
+                    statement.setString(2, state.printerId)
+                    statement.setLong(3, state.updatedAtMs)
+                    statement.setFloat(4, state.currentViability)
+                    statement.setFloat(5, state.predictedViability5m)
+                    statement.setFloat(6, state.collapseRiskScore)
+                    statement.setString(7, state.recommendedAction.name)
+                    statement.setFloat(8, state.confidence)
                     statement.executeUpdate()
                 }
             }
         }
     }
 
-    override fun findByPrinterId(printerId: String): DigitalTwinState? {
-        return dataSource.connection.use { connection ->
+    override fun findByPrinterId(tenantId: String, printerId: String): DigitalTwinState? {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     printer_id,
                     updated_at_ms,
                     current_viability,
@@ -246,10 +258,11 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                     recommended_action,
                     confidence
                 FROM digital_twin_snapshots
-                WHERE printer_id = ?
+                WHERE tenant_id = ? AND printer_id = ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, printerId)
+                statement.setString(1, tenantId)
+                statement.setString(2, printerId)
                 statement.executeQuery().use { rs ->
                     if (rs.next()) rs.toDigitalTwinState() else null
                 }
@@ -257,11 +270,12 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
         }
     }
 
-    override fun findAll(): List<DigitalTwinState> {
-        return dataSource.connection.use { connection ->
+    override fun findAll(tenantId: String): List<DigitalTwinState> {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     printer_id,
                     updated_at_ms,
                     current_viability,
@@ -270,9 +284,11 @@ class JdbcDigitalTwinStore(private val dataSource: DataSource) : DigitalTwinStor
                     recommended_action,
                     confidence
                 FROM digital_twin_snapshots
+                WHERE tenant_id = ?
                 ORDER BY updated_at_ms DESC
                 """.trimIndent(),
             ).use { statement ->
+                statement.setString(1, tenantId)
                 statement.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
@@ -291,6 +307,7 @@ class JdbcClinicalDocumentStore(
     private val defaultRetentionDays: Int = 3650,
 ) : ClinicalDocumentStore {
     override fun append(document: ClinicalDocument) {
+        val tenantId = document.tenantId
         val classification = document.metadata["dataClassification"] ?: "PHI"
         val protectedPayload =
             dataProtectionService?.protect(document.content, classification)
@@ -298,10 +315,11 @@ class JdbcClinicalDocumentStore(
         val retentionUntil =
             Instant.ofEpochMilli(document.createdAtMs)
                 .plusSeconds(defaultRetentionDays.toLong() * 24L * 3600L)
-        dataSource.connection.use { connection ->
+        dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 INSERT INTO clinical_documents(
+                    tenant_id,
                     document_type,
                     external_id,
                     patient_id,
@@ -311,28 +329,30 @@ class JdbcClinicalDocumentStore(
                     key_id,
                     retention_until,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, document.documentType.name)
-                statement.setString(2, document.externalId)
-                statement.setString(3, document.patientId)
-                statement.setString(4, protectedPayload.content)
-                statement.setString(5, encodeMap(document.metadata))
-                statement.setString(6, classification)
-                statement.setString(7, protectedPayload.keyId)
-                statement.setTimestamp(8, Timestamp.from(retentionUntil))
-                statement.setTimestamp(9, Timestamp.from(Instant.ofEpochMilli(document.createdAtMs)))
+                statement.setString(1, tenantId)
+                statement.setString(2, document.documentType.name)
+                statement.setString(3, document.externalId)
+                statement.setString(4, document.patientId)
+                statement.setString(5, protectedPayload.content)
+                statement.setString(6, encodeMap(document.metadata))
+                statement.setString(7, classification)
+                statement.setString(8, protectedPayload.keyId)
+                statement.setTimestamp(9, Timestamp.from(retentionUntil))
+                statement.setTimestamp(10, Timestamp.from(Instant.ofEpochMilli(document.createdAtMs)))
                 statement.executeUpdate()
             }
         }
     }
 
-    override fun recent(limit: Int): List<ClinicalDocument> {
-        return dataSource.connection.use { connection ->
+    override fun recent(tenantId: String, limit: Int): List<ClinicalDocument> {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     document_type,
                     external_id,
                     patient_id,
@@ -340,11 +360,13 @@ class JdbcClinicalDocumentStore(
                     metadata_json,
                     created_at
                 FROM clinical_documents
+                WHERE tenant_id = ?
                 ORDER BY created_at DESC
                 LIMIT ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setInt(1, limit)
+                statement.setString(1, tenantId)
+                statement.setInt(2, limit)
                 statement.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
@@ -362,13 +384,15 @@ class JdbcClinicalDocumentStore(
     }
 
     override fun findByPatientId(
+        tenantId: String,
         patientId: String,
         limit: Int,
     ): List<ClinicalDocument> {
-        return dataSource.connection.use { connection ->
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     document_type,
                     external_id,
                     patient_id,
@@ -376,13 +400,14 @@ class JdbcClinicalDocumentStore(
                     metadata_json,
                     created_at
                 FROM clinical_documents
-                WHERE patient_id = ?
+                WHERE tenant_id = ? AND patient_id = ?
                 ORDER BY created_at DESC
                 LIMIT ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, patientId)
-                statement.setInt(2, limit)
+                statement.setString(1, tenantId)
+                statement.setString(2, patientId)
+                statement.setInt(3, limit)
                 statement.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
@@ -402,16 +427,19 @@ class JdbcClinicalDocumentStore(
 
 class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore {
     override fun append(event: AuditEvent) {
-        dataSource.connection.use { connection ->
+        val tenantId = event.tenantId
+        dataSource.useTenantConnection(tenantId) { connection ->
             val previousHash =
                 connection.prepareStatement(
                     """
                     SELECT event_hash
                     FROM audit_events
+                    WHERE tenant_id = ?
                     ORDER BY id DESC
                     LIMIT 1
                     """.trimIndent(),
                 ).use { statement ->
+                    statement.setString(1, tenantId)
                     statement.executeQuery().use { rs ->
                         if (rs.next()) rs.getString("event_hash") else null
                     }
@@ -421,6 +449,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
             connection.prepareStatement(
                 """
                 INSERT INTO audit_events(
+                    tenant_id,
                     actor,
                     action,
                     resource_type,
@@ -431,29 +460,31 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                     previous_hash,
                     event_hash,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, event.actor)
-                statement.setString(2, event.action)
-                statement.setString(3, event.resourceType)
-                statement.setString(4, event.resourceId)
-                statement.setString(5, event.outcome)
-                statement.setString(6, event.requirementIds.joinToString(","))
-                statement.setString(7, encodeMap(event.details))
-                statement.setString(8, previousHash)
-                statement.setString(9, eventHash)
-                statement.setTimestamp(10, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
+                statement.setString(1, tenantId)
+                statement.setString(2, event.actor)
+                statement.setString(3, event.action)
+                statement.setString(4, event.resourceType)
+                statement.setString(5, event.resourceId)
+                statement.setString(6, event.outcome)
+                statement.setString(7, event.requirementIds.joinToString(","))
+                statement.setString(8, encodeMap(event.details))
+                statement.setString(9, previousHash)
+                statement.setString(10, eventHash)
+                statement.setTimestamp(11, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
                 statement.executeUpdate()
             }
         }
     }
 
-    override fun recent(limit: Int): List<AuditEvent> {
-        return dataSource.connection.use { connection ->
+    override fun recent(tenantId: String, limit: Int): List<AuditEvent> {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     actor,
                     action,
                     resource_type,
@@ -463,16 +494,19 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                     details_json,
                     created_at
                 FROM audit_events
+                WHERE tenant_id = ?
                 ORDER BY created_at DESC
                 LIMIT ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setInt(1, limit)
+                statement.setString(1, tenantId)
+                statement.setInt(2, limit)
                 statement.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
                             add(
                                 AuditEvent(
+                                    tenantId = rs.getString("tenant_id"),
                                     actor = rs.getString("actor"),
                                     action = rs.getString("action"),
                                     resourceType = rs.getString("resource_type"),
@@ -494,11 +528,12 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
         }
     }
 
-    override fun verifyChain(limit: Int): AuditChainVerification {
-        dataSource.connection.use { connection ->
+    override fun verifyChain(tenantId: String, limit: Int): AuditChainVerification {
+        dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     actor,
                     action,
                     resource_type,
@@ -510,11 +545,13 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                     event_hash,
                     created_at
                 FROM audit_events
+                WHERE tenant_id = ?
                 ORDER BY id ASC
                 LIMIT ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setInt(1, limit)
+                statement.setString(1, tenantId)
+                statement.setInt(2, limit)
                 statement.executeQuery().use { rs ->
                     var index = 0
                     var previousHash: String? = null
@@ -522,6 +559,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
                         index++
                         val event =
                             AuditEvent(
+                                tenantId = rs.getString("tenant_id"),
                                 actor = rs.getString("actor"),
                                 action = rs.getString("action"),
                                 resourceType = rs.getString("resource_type"),
@@ -573,6 +611,7 @@ class JdbcAuditEventStore(private val dataSource: DataSource) : AuditEventStore 
 private fun ResultSet.toTelemetryEvent(): TelemetryEvent {
     val encodedImage = getString("encrypted_image_matrix_base64") ?: ""
     return TelemetryEvent(
+        tenantId = getString("tenant_id"),
         telemetry =
             TelemetryState(
                 printerId = getString("printer_id"),
@@ -595,6 +634,7 @@ private fun ResultSet.toTelemetryEvent(): TelemetryEvent {
 
 private fun ResultSet.toDigitalTwinState(): DigitalTwinState {
     return DigitalTwinState(
+        tenantId = getString("tenant_id"),
         printerId = getString("printer_id"),
         updatedAtMs = getLong("updated_at_ms"),
         currentViability = getFloat("current_viability"),
@@ -607,6 +647,7 @@ private fun ResultSet.toDigitalTwinState(): DigitalTwinState {
 
 private fun ResultSet.toClinicalDocument(): ClinicalDocument {
     return ClinicalDocument(
+        tenantId = getString("tenant_id"),
         documentType = com.neogenesis.server.domain.model.ClinicalDocumentType.valueOf(getString("document_type")),
         externalId = getString("external_id"),
         patientId = getString("patient_id"),

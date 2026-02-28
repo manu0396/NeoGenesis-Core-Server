@@ -25,6 +25,7 @@ data class RetinalControlConstraints(
 
 @Serializable
 data class RetinalPrintPlan(
+    val tenantId: String,
     val planId: String,
     val patientId: String,
     val sourceDocumentId: String?,

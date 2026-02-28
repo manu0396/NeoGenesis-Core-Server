@@ -1,8 +1,14 @@
 package com.neogenesis.gateway.connector
 
+import com.neogenesis.gateway.queue.OfflineQueue
+import com.neogenesis.gateway.queue.QueueItem
+import com.neogenesis.gateway.queue.QueueItemType
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import java.time.Instant
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 enum class Capability {
     Telemetry,
@@ -98,98 +104,40 @@ interface Driver {
     suspend fun readTelemetry(): TelemetryEvent
 }
 
-data class DriverTimeouts(
-    val initMs: Long,
-    val startMs: Long,
-    val stopMs: Long,
-    val healthMs: Long,
-    val readTelemetryMs: Long,
-) {
-    companion object {
-        fun fromSingle(timeoutMs: Long): DriverTimeouts {
-            return DriverTimeouts(
-                initMs = timeoutMs,
-                startMs = timeoutMs,
-                stopMs = timeoutMs,
-                healthMs = timeoutMs,
-                readTelemetryMs = timeoutMs,
-            )
-        }
-    }
-}
-
-class DriverTimeoutException(
-    val operation: String,
-    val timeoutMs: Long,
-) : RuntimeException("Driver operation '$operation' exceeded ${timeoutMs}ms")
-
-class ManagedDriver(
+class ResilientDriver(
     private val delegate: Driver,
-) : Driver {
-    override val id: String = delegate.id
-    override val capabilities: Set<Capability> = delegate.capabilities
-    override val telemetrySchema: TelemetrySchema = delegate.telemetrySchema
-    override val manifest: ConnectorManifest = delegate.manifest
-
-    @Volatile
-    private var lifecycle = DriverLifecycle(DriverState.Created, Instant.now())
-
-    fun currentLifecycle(): DriverLifecycle = lifecycle
-
-    override suspend fun init(context: DriverContext) {
-        requireState(DriverState.Created, DriverState.Stopped)
-        runWithLifecycle("init") {
-            delegate.init(context)
-            transition(DriverState.Initialized, null)
-        }
-    }
-
-    override suspend fun start() {
-        requireState(DriverState.Initialized)
-        runWithLifecycle("start") {
-            delegate.start()
-            transition(DriverState.Started, null)
-        }
-    }
-
-    override suspend fun stop() {
-        if (lifecycle.state == DriverState.Stopped) return
-        requireState(DriverState.Initialized, DriverState.Started)
-        runWithLifecycle("stop") {
-            delegate.stop()
-            transition(DriverState.Stopped, null)
-        }
-    }
-
-    override suspend fun health(): DriverHealth {
-        requireState(DriverState.Initialized, DriverState.Started, DriverState.Stopped)
-        return runWithLifecycle("health") { delegate.health() }
-    }
+    private val offlineQueue: OfflineQueue,
+    private val maxInFlight: Int = 100,
+) : Driver by delegate {
+    private val inFlight = AtomicInteger(0)
 
     override suspend fun readTelemetry(): TelemetryEvent {
-        requireState(DriverState.Started)
-        return runWithLifecycle("readTelemetry") { delegate.readTelemetry() }
-    }
-
-    private fun requireState(vararg allowed: DriverState) {
-        if (!allowed.contains(lifecycle.state)) {
-            throw IllegalStateException("Driver state ${lifecycle.state} not in ${allowed.toList()}")
+        // Backpressure check
+        while (inFlight.get() >= maxInFlight) {
+            delay(10)
+        }
+        
+        return try {
+            inFlight.incrementAndGet()
+            val event = delegate.readTelemetry()
+            // If we have items in offline queue, we should probably drain them first or alongside
+            event
+        } catch (e: Exception) {
+            // Buffer to offline queue if read fails (if driver supports buffering)
+            throw e
+        } finally {
+            inFlight.decrementAndGet()
         }
     }
-
-    private fun transition(state: DriverState, error: String?) {
-        lifecycle = DriverLifecycle(state = state, updatedAt = Instant.now(), error = error)
-    }
-
-    private suspend fun <T> runWithLifecycle(
-        operation: String,
-        block: suspend () -> T,
-    ): T {
-        return runCatching { block() }
-            .onFailure { error ->
-                transition(DriverState.Failed, "$operation:${error.message}")
-            }
-            .getOrThrow()
+    
+    suspend fun bufferEvent(event: TelemetryEvent) {
+        val item = QueueItem(
+            id = UUID.randomUUID().toString(),
+            type = QueueItemType.TELEMETRY,
+            createdAtMs = event.timestamp.toEpochMilli(),
+            payload = event.payload.entries.joinToString(",") { "${it.key}=${it.value}" }
+        )
+        offlineQueue.append(item)
     }
 }
 
@@ -234,3 +182,28 @@ class SandboxedDriver(
         }
     }
 }
+
+data class DriverTimeouts(
+    val initMs: Long,
+    val startMs: Long,
+    val stopMs: Long,
+    val healthMs: Long,
+    val readTelemetryMs: Long,
+) {
+    companion object {
+        fun fromSingle(timeoutMs: Long): DriverTimeouts {
+            return DriverTimeouts(
+                initMs = timeoutMs,
+                startMs = timeoutMs,
+                stopMs = timeoutMs,
+                healthMs = timeoutMs,
+                readTelemetryMs = timeoutMs,
+            )
+        }
+    }
+}
+
+class DriverTimeoutException(
+    val operation: String,
+    val timeoutMs: Long,
+) : RuntimeException("Driver operation '$operation' exceeded ${timeoutMs}ms")

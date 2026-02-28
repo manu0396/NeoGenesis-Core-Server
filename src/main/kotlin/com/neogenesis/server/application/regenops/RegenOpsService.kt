@@ -71,9 +71,15 @@ class RegenOpsService(
         protocolId: String,
         actorId: String,
         changelog: String,
+        signature: com.neogenesis.server.application.compliance.ESignature? = null,
     ): RegenProtocolVersion {
         val normalizedTenant = normalizeTenant(tenantId)
         val normalizedProtocol = normalizeProtocol(protocolId)
+        
+        if (complianceConfig.esignEnabled && signature == null) {
+            throw BadRequestException(code = "esign_required", message = "E-Signature is required for protocol publishing")
+        }
+
         if (complianceConfig.enabled) {
             val approval =
                 store.consumePublishApproval(

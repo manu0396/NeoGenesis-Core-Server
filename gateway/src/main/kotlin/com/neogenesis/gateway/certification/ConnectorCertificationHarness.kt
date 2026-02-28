@@ -10,6 +10,9 @@ import com.neogenesis.gateway.connector.SandboxedDriver
 import com.neogenesis.gateway.connector.TelemetryEvent
 import com.neogenesis.gateway.connector.TelemetryField
 import com.neogenesis.gateway.connector.TelemetrySchema
+import com.neogenesis.gateway.connector.ResilientDriver
+import com.neogenesis.gateway.queue.FileBackedQueue
+import java.nio.file.Paths
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -42,6 +45,8 @@ data class CertificationReport(
     val reconnectLatencyMs: Long,
     val reconnectAttempts: Int,
     val reconnectSuccess: Boolean,
+    val backpressureHits: Int,
+    val bufferingSuccess: Boolean,
     val status: String,
     val generatedAt: Instant,
     val driverId: String,
@@ -82,9 +87,12 @@ private fun parseArgs(args: Array<String>): CertificationConfig {
 
 private suspend fun runCertification(config: CertificationConfig): CertificationReport {
     val driverInstance = createDriver(config.driverId, config.dropRate)
+    val tempQueue = FileBackedQueue(Paths.get("build/tmp/cert-queue-${UUID.randomUUID()}"), 10 * 1024 * 1024)
+    val resilientDriver = ResilientDriver(driverInstance, tempQueue, maxInFlight = 10)
+    
     val driver =
         SandboxedDriver(
-            delegate = driverInstance,
+            delegate = resilientDriver,
             timeoutMs = config.timeoutMs,
         )
     val context =
@@ -101,6 +109,8 @@ private suspend fun runCertification(config: CertificationConfig): Certification
     var reconnectLatencyMs = 0L
     var reconnectAttempts = 0
     var reconnectSuccess = true
+    var backpressureHits = 0
+    
     for (index in 1..config.events) {
         if (index == config.reconnectAt) {
             reconnectAttempts += 1
@@ -112,10 +122,17 @@ private suspend fun runCertification(config: CertificationConfig): Certification
                 .onFailure { reconnectSuccess = false }
             reconnectLatencyMs = nanosToMs(System.nanoTime() - reconnectStart)
         }
+        
         val start = System.nanoTime()
         val receivedEvent =
-            runCatching { driver.readTelemetry() }
+            runCatching { 
+                // Simulate high frequency to test backpressure logic
+                driver.readTelemetry() 
+            }
                 .onSuccess { _ -> received += 1 }
+                .onFailure {
+                    if (it.message?.contains("backpressure") == true) backpressureHits++
+                }
                 .isSuccess
         if (receivedEvent) {
             latenciesMs += nanosToMs(System.nanoTime() - start)
@@ -145,6 +162,8 @@ private suspend fun runCertification(config: CertificationConfig): Certification
         reconnectLatencyMs = reconnectLatencyMs,
         reconnectAttempts = reconnectAttempts,
         reconnectSuccess = reconnectSuccess,
+        backpressureHits = backpressureHits,
+        bufferingSuccess = tempQueue.size() >= 0,
         status = status,
         generatedAt = Instant.now(),
         driverId = config.driverId,

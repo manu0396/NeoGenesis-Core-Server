@@ -39,6 +39,7 @@ fun Route.connectorCertificationModule(auditTrailService: AuditTrailService) {
 
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = request.tenantId,
                     actor = call.actor(),
                     action = "connector.certify.requested",
                     resourceType = "connector",
