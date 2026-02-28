@@ -393,7 +393,9 @@ fun Application.module() {
     }
 
     configureAuthentication(resolvedSecurityConfig.jwt, jwtVerifier)
-    configureTenantIsolation(appConfig.runtime.isProduction())
+    if (appConfig.env == AppConfig.ENV_PRODUCTION) {
+        configureTenantIsolation()
+    }
     configureRateLimiting(appConfig)
 
     val abacPolicyEngine = DefaultAbacPolicyEngine()
