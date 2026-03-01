@@ -1,0 +1,39 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neogenesis-gateway
+  labels:
+    app: neogenesis-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neogenesis-gateway
+  template:
+    metadata:
+      labels:
+        app: neogenesis-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: neogenesis/gateway:latest
+          envFrom:
+            - secretRef:
+                name: neogenesis-gateway-secrets
+          env:
+            - name: SERVER_HOST
+              value: "neogenesis-core-server"
+            - name: SERVER_PORT
+              value: "50051"
+            - name: SERVER_TLS
+              value: "true"
+            - name: GATEWAY_MTLS
+              value: "true"
+          volumeMounts:
+            - name: gateway-certs
+              mountPath: /etc/neogenesis/certs
+              readOnly: true
+      volumes:
+        - name: gateway-certs
+          secret:
+            secretName: neogenesis-gateway-certs
