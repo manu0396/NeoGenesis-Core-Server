@@ -92,7 +92,10 @@ fun Route.traceMetricsModule(
     }
 }
 
-private fun latestRunId(dataSource: DataSource, tenantId: String): String {
+private fun latestRunId(
+    dataSource: DataSource,
+    tenantId: String,
+): String {
     return dataSource.connection.use { connection ->
         connection.prepareStatement(
             """

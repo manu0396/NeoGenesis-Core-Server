@@ -61,8 +61,8 @@ import com.neogenesis.server.modules.admin.adminApiModule
 import com.neogenesis.server.modules.admin.adminWebModule
 import com.neogenesis.server.modules.auditModule
 import com.neogenesis.server.modules.authModule
-import com.neogenesis.server.modules.billingModule
 import com.neogenesis.server.modules.benchmark.benchmarkModule
+import com.neogenesis.server.modules.billingModule
 import com.neogenesis.server.modules.bioinkModule
 import com.neogenesis.server.modules.commercial.CommercialRepository
 import com.neogenesis.server.modules.commercial.CommercialService
@@ -102,14 +102,14 @@ import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.json.Json
 import org.slf4j.MDC
 import org.slf4j.event.Level
 import java.io.File
 import java.net.URI
 import java.util.UUID
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
 
 fun main(args: Array<String>) {
     EngineMain.main(args)
