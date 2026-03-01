@@ -2,6 +2,21 @@
 
 Este runbook define la secuencia minima para cerrar `GO` con evidencias reales de entorno.
 
+## 0. Ejecucion recomendada (orquestada)
+
+Ejecutar workflow:
+- `.github/workflows/production-evidence-suite.yml`
+
+Este workflow dispara en cadena:
+1. `release-readiness` en `production` con:
+   - `run_k8s_checks=true`
+   - `run_backup_restore=true`
+   - `run_alerting_checks=true`
+2. `perf-hil` con validacion de p95/p99.
+3. `deploy-canary` con `run_rollback_drill=true`.
+
+Si cualquiera falla, la suite falla y no se considera `GO`.
+
 ## 1. Supply-chain gate (obligatorio)
 
 Ejecutar workflow:
