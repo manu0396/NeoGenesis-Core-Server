@@ -18,6 +18,8 @@ import io.ktor.server.request.receive
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.request.receive
+import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -207,11 +209,13 @@ data class ProtocolSummaryResponse(
     val title: String,
     val summary: String,
     val latestVersion: Int,
+    val status: String? = null,
     val resultSummary: String? = null,
     val lastOutcome: String? = null,
     val resultMetrics: Map<String, String> = emptyMap(),
     val evidenceSummary: String? = null,
     val lastRunTimeline: List<String> = emptyList(),
+    val evidenceArtifacts: List<String> = emptyList(),
 )
 
 @Serializable
@@ -221,11 +225,13 @@ data class CreateProtocolRequest(
     val summary: String,
     val contentJson: String,
     val author: String,
+    val status: String? = null,
     val resultSummary: String? = null,
     val lastOutcome: String? = null,
     val resultMetrics: Map<String, String> = emptyMap(),
     val evidenceSummary: String? = null,
     val lastRunTimeline: List<String> = emptyList(),
+    val evidenceArtifacts: List<String> = emptyList(),
 )
 
 @Serializable
@@ -340,6 +346,7 @@ private object DemoProtocolStore {
                     title = "RegenOps: Controlled Growth Run",
                     summary = "Execute a controlled growth simulation with safety bounds and trace checkpoints.",
                     latestVersion = 3,
+                    status = "PUBLISHED",
                     resultSummary = "Yield stability 98.7% with zero drift alerts across 3 checkpoints.",
                     lastOutcome = "SUCCESS",
                     resultMetrics = mapOf(
@@ -354,6 +361,7 @@ private object DemoProtocolStore {
                         "00:29 Checkpoint B verified",
                         "00:41 Completion & seal",
                     ),
+                    evidenceArtifacts = listOf("run_report.csv", "audit_bundle.zip", "manifest.json"),
                 ),
             )
         }
@@ -372,6 +380,8 @@ private object DemoProtocolStore {
             resultMetrics = request.resultMetrics,
             evidenceSummary = request.evidenceSummary,
             lastRunTimeline = request.lastRunTimeline,
+            evidenceArtifacts = request.evidenceArtifacts,
+            status = request.status,
         )
         list.add(0, created)
         return created
