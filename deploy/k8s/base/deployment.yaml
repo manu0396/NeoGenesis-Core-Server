@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neogenesis-core
+  labels:
+    app: neogenesis-core
+spec:
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: neogenesis-core
+  template:
+    metadata:
+      labels:
+        app: neogenesis-core
+    spec:
+      containers:
+        - name: neogenesis-core
+          image: ghcr.io/neogenesis/core-server:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 50051
+              name: grpc
+          env:
+            - name: NEOGENESIS_RUNTIME_ENVIRONMENT
+              value: "production"
+            - name: NEOGENESIS_DB_JDBC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: neogenesis-db
+                  key: jdbc-url
+            - name: NEOGENESIS_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: neogenesis-db
+                  key: username
+            - name: NEOGENESIS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: neogenesis-db
+                  key: password
+            - name: NEOGENESIS_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: neogenesis-auth
+                  key: jwt-secret
+            - name: NEOGENESIS_ENCRYPTION_ENABLED
+              value: "true"
+            - name: NEOGENESIS_MTLS_GRPC_ENABLED
+              value: "true"
+            - name: NEOGENESIS_MTLS_GRPC_CERT_CHAIN_PATH
+              value: "/etc/neogenesis/grpc-tls/tls.crt"
+            - name: NEOGENESIS_MTLS_GRPC_PRIVATE_KEY_PATH
+              value: "/etc/neogenesis/grpc-tls/tls.key"
+            - name: NEOGENESIS_MTLS_GRPC_TRUST_CERT_PATH
+              value: "/etc/neogenesis/grpc-tls/ca.crt"
+            - name: NEOGENESIS_PHI_KEY_B64
+              valueFrom:
+                secretKeyRef:
+                  name: neogenesis-encryption
+                  key: phi-key-b64
+            - name: NEOGENESIS_PII_KEY_B64
+              valueFrom:
+                secretKeyRef:
+                  name: neogenesis-encryption
+                  key: pii-key-b64
+            - name: NEOGENESIS_SERVERLESS_PROVIDER
+              value: "aws_eventbridge"
+            - name: NEOGENESIS_AWS_EVENTBRIDGE_BUS
+              valueFrom:
+                secretKeyRef:
+                  name: neogenesis-serverless
+                  key: eventbridge-bus
+            - name: NEOGENESIS_AWS_EVENTBRIDGE_REGION
+              value: "eu-west-1"
+            - name: JAVA_OPTS
+              value: "-XX:MaxRAMPercentage=75"
+          volumeMounts:
+            - name: grpc-tls
+              mountPath: /etc/neogenesis/grpc-tls
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: grpc-tls
+          secret:
+            secretName: neogenesis-grpc-tls

@@ -1,0 +1,45 @@
+groups:
+  - name: neogenesis-slo
+    interval: 30s
+    rules:
+      - alert: NeoGenesisTelemetryP99LatencyHigh
+        expr: histogram_quantile(0.99, sum(rate(neogenesis_telemetry_processing_latency_seconds_bucket[5m])) by (le)) > 0.05
+        for: 5m
+        labels:
+          severity: page
+          service: neogenesis-core
+          slo: telemetry-latency
+        annotations:
+          summary: "Telemetry p99 latency exceeded 50ms"
+          description: "p99 over 5m is above 50ms, violating closed-loop control SLO."
+
+      - alert: NeoGenesisLatencyBudgetBurnRate
+        expr: rate(neogenesis_latency_budget_breaches_total[10m]) > 0.1
+        for: 10m
+        labels:
+          severity: page
+          service: neogenesis-core
+          slo: latency-budget
+        annotations:
+          summary: "Latency budget burn-rate is high"
+          description: "Too many latency budget breaches are being recorded."
+
+      - alert: NeoGenesisOutboxDeadLetterGrowth
+        expr: rate(neogenesis_outbox_dead_letter_total[5m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          service: neogenesis-core
+        annotations:
+          summary: "Dead-letter queue is growing"
+          description: "Outbox events are failing permanently; investigate integration dependencies."
+
+      - alert: NeoGenesisCircuitBreakerOpen
+        expr: increase(neogenesis_integration_circuit_breaker_total{event="open"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: page
+          service: neogenesis-core
+        annotations:
+          summary: "Integration circuit breaker opened"
+          description: "External clinical integration became unhealthy and is in open state."

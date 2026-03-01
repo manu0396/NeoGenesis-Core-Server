@@ -1,0 +1,39 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "service", "slo"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 30m
+  receiver: default-email
+  routes:
+    - matchers:
+        - severity="page"
+      receiver: pagerduty-primary
+      continue: true
+    - matchers:
+        - severity="warning"
+      receiver: slack-ops
+
+receivers:
+  - name: default-email
+    email_configs:
+      - to: sre@neogenesis.example
+        from: alertmanager@neogenesis.example
+        smarthost: smtp.neogenesis.example:587
+        auth_username: alertmanager
+        auth_password: "${ALERTMANAGER_SMTP_PASSWORD}"
+
+  - name: pagerduty-primary
+    pagerduty_configs:
+      - routing_key: "${PAGERDUTY_ROUTING_KEY}"
+        description: "{{ .CommonAnnotations.summary }}"
+        severity: critical
+
+  - name: slack-ops
+    slack_configs:
+      - api_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#neogenesis-alerts"
+        title: "{{ .CommonLabels.alertname }}"
+        text: "{{ .CommonAnnotations.description }}"

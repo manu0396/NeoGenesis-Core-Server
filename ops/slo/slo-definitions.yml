@@ -1,0 +1,22 @@
+slos:
+  - name: telemetry-control-latency
+    objective: 99.0
+    window: 30d
+    indicator:
+      type: latency
+      metric: neogenesis_telemetry_processing_latency_seconds
+      threshold_ms: 50
+      percentile: p99
+    alerting:
+      fast_burn: 14.4
+      slow_burn: 6
+  - name: clinical-integration-availability
+    objective: 99.5
+    window: 30d
+    indicator:
+      type: ratio
+      success_metric: neogenesis_pacs_fetch_total{outcome="success"}
+      total_metric: neogenesis_pacs_fetch_total
+    alerting:
+      fast_burn: 10
+      slow_burn: 4

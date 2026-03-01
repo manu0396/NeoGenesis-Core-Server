@@ -1,0 +1,16 @@
+﻿requirement_id,iso_clause,title,linked_operations,verification
+REQ-ISO-001,4.2.4,Document control and records,"audit.write,compliance.traceability",unit-test+api-test
+REQ-ISO-002,7.3.2,Design and development planning,"telemetry.process,telemetry.bioSimulation,control.decision,retina.plan.create,print.session.create",unit-test+integration-test
+REQ-ISO-003,7.3.7,Design validation,"digitalTwin.update,retina.closedLoop",simulation-test
+REQ-ISO-004,7.5.6,Validation of process for production,"grpc.streamTelemetryAndControl,mqtt.ingest",integration-test
+REQ-ISO-005,7.5.9,Traceability,"persistence.telemetry,persistence.command,persistence.audit,persistence.retinaPlan,persistence.printSession",db-test
+REQ-ISO-006,8.2.4,Monitoring and measurement,"observability.metrics,health.readiness,sre.latency.breach",api-test
+REQ-ISO-007,8.3,Control of nonconforming product,"safety.emergencyHalt,retina.thresholdBreach",scenario-test
+REQ-ISO-008,8.5.2,Corrective action,"audit.incident,security.authzDenied",tabletop-test
+REQ-ISO-009,7.5.11,Data and cyber protection,"security.jwt,security.mtls,security.aes256",security-test
+REQ-ISO-010,7.5.3,Clinical data integration,"clinical.ingest.fhir,clinical.ingest.hl7,clinical.ingest.dicom,clinical.ingest.dicomweb,clinical.query.documents,clinical.pacs.query,clinical.hl7.mllp.send,clinical.hl7.mllp.inbound,clinical.analytics.fhir.cohort",integration-test
+REQ-ISO-011,7.5.6,Asynchronous processing control,"serverless.outbox.enqueue,serverless.outbox.ack,serverless.outbox.drain,serverless.outbox.retry,serverless.outbox.deadletter",integration-test
+REQ-ISO-012,7.5.11,GDPR lifecycle controls,"gdpr.consent.grant,gdpr.consent.revoke,gdpr.erasure.execute,persistence.anonymize",integration-test
+REQ-ISO-013,7.5.3,DIMSE interoperability,"clinical.dimse.cfind,clinical.dimse.cmove,clinical.dimse.cget",integration-test
+REQ-ISO-014,8.5.1,Resilience and idempotency controls,"resilience.circuitBreaker,resilience.timeoutBudget,resilience.idempotency,replay.deadletter",scenario-test
+REQ-ISO-015,7.3.9,SaMD regulatory package management,"regulatory.capa.create,regulatory.capa.update,regulatory.risk.upsert,regulatory.dhf.add",audit-test
