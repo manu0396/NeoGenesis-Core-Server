@@ -47,6 +47,18 @@ fun Route.demoUiModule(
         }
 
         post("/api/v1/regenops/protocols") {
+        post("/api/v1/regenops/protocols/{protocolId}/status") {
+            call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR)
+            val tenantId = call.requireTenantId()
+            call.requireCorrelationId()
+            val protocolId = call.parameters["protocolId"]?.trim().orEmpty()
+            if (protocolId.isBlank()) throw ApiException("protocol_required", "protocolId is required", HttpStatusCode.BadRequest)
+            val request = call.receive<UpdateProtocolStatusRequest>()
+            val updated = DemoProtocolStore.updateStatus(tenantId, protocolId, request.status)
+            call.respond(updated)
+        }
+
+        
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR)
             val tenantId = call.requireTenantId()
             call.requireCorrelationId()
@@ -210,12 +222,14 @@ data class ProtocolSummaryResponse(
     val summary: String,
     val latestVersion: Int,
     val status: String? = null,
+    val status: String? = null,
     val resultSummary: String? = null,
     val lastOutcome: String? = null,
     val resultMetrics: Map<String, String> = emptyMap(),
     val evidenceSummary: String? = null,
     val lastRunTimeline: List<String> = emptyList(),
     val evidenceArtifacts: List<String> = emptyList(),
+    val lastRunId: String? = null,
 )
 
 @Serializable
@@ -232,6 +246,7 @@ data class CreateProtocolRequest(
     val evidenceSummary: String? = null,
     val lastRunTimeline: List<String> = emptyList(),
     val evidenceArtifacts: List<String> = emptyList(),
+    val lastRunId: String? = null,
 )
 
 @Serializable
@@ -362,6 +377,7 @@ private object DemoProtocolStore {
                         "00:41 Completion & seal",
                     ),
                     evidenceArtifacts = listOf("run_report.csv", "audit_bundle.zip", "manifest.json"),
+                    lastRunId = "run-demo",
                 ),
             )
         }
@@ -381,6 +397,7 @@ private object DemoProtocolStore {
             evidenceSummary = request.evidenceSummary,
             lastRunTimeline = request.lastRunTimeline,
             evidenceArtifacts = request.evidenceArtifacts,
+            lastRunId = request.lastRunId,
             status = request.status,
         )
         list.add(0, created)
