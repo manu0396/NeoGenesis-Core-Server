@@ -63,6 +63,7 @@ import com.neogenesis.server.modules.bioinkModule
 import com.neogenesis.server.modules.commercial.CommercialRepository
 import com.neogenesis.server.modules.commercial.CommercialService
 import com.neogenesis.server.modules.commercial.commercialModule
+import com.neogenesis.server.modules.connectors.connectorCertificationModule
 import com.neogenesis.server.modules.devicesModule
 import com.neogenesis.server.modules.healthModule
 import com.neogenesis.server.modules.jobsModule
@@ -490,6 +491,11 @@ fun Application.module() {
         if (appConfig.commercial.enabled) {
             commercialModule(
                 service = commercialService,
+            )
+        }
+        if (appConfig.connectorCertification.enabled) {
+            connectorCertificationModule(
+                auditTrailService = auditTrailService,
             )
         }
         bioinkModule(

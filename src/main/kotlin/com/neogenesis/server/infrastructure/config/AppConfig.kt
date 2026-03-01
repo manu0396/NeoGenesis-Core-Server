@@ -21,6 +21,10 @@ data class AppConfig(
         CommercialConfig(
             enabled = false,
         ),
+    val connectorCertification: ConnectorCertificationConfig =
+        ConnectorCertificationConfig(
+            enabled = false,
+        ),
     val host: String = "0.0.0.0",
     val port: Int = 8080,
     val env: String = "development",
@@ -88,6 +92,10 @@ data class AppConfig(
         val user: String?,
         val password: String?,
         val passwordHash: String?,
+    )
+
+    data class ConnectorCertificationConfig(
+        val enabled: Boolean,
     )
 
     data class DatabaseConfig(
@@ -713,6 +721,13 @@ data class AppConfig(
                         enabled =
                             env("COMMERCIAL_MODE")?.equals("true", ignoreCase = true)
                                 ?: config.bool("neogenesis.commercial.mode")
+                                ?: false,
+                    ),
+                connectorCertification =
+                    ConnectorCertificationConfig(
+                        enabled =
+                            env("CONNECTOR_CERTIFICATION_MODE")?.equals("true", ignoreCase = true)
+                                ?: config.bool("neogenesis.connector.certification.mode")
                                 ?: false,
                     ),
                 host = host,
