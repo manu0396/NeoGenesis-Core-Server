@@ -245,9 +245,10 @@ private fun buildEvidenceBundle(
     regenOpsStore: RegenOpsStore,
     includeEventChain: Boolean,
 ): ByteArray {
+    val prefix = sanitizeJobId(jobId)
     val files = linkedMapOf<String, ByteArray>()
-    files["report.csv"] = report.toCsv().toByteArray(Charsets.UTF_8)
-    files["report.pdf"] = report.toPdfBytes()
+    files["$prefix-report.csv"] = report.toCsv().toByteArray(Charsets.UTF_8)
+    files["$prefix-report.pdf"] = report.toPdfBytes()
 
     if (includeEventChain) {
         val runEvents = regenOpsStore.listRunEvents(tenantId, jobId, 0, 0, 10_000)
@@ -315,6 +316,11 @@ private fun buildEvidenceBundle(
         }
     }
     return output.toByteArray()
+}
+
+private fun sanitizeJobId(jobId: String): String {
+    val filtered = jobId.replace(Regex("[^A-Za-z0-9_-]+"), "_")
+    return filtered.ifBlank { "job" }
 }
 
 @Serializable

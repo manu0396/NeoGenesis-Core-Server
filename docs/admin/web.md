@@ -23,6 +23,11 @@ npm install
 npm run dev
 ```
 
+### Windows dev notes
+1. Open PowerShell, run `Set-ExecutionPolicy Bypass -Scope Process -Force` if scripts are blocked.
+2. The Vite dev server defaults to `http://localhost:5173`; set `VITE_API_BASE_URL` in `.env` (or copy `.env.example`) when the backend runs on another host or emulator (`http://10.0.2.2:8080` for Android emulators).
+3. Re-run `npm run dev` after editing `.env.local`.
+
 Env overrides for the UI:
 ```
 VITE_API_BASE_URL=http://localhost:8080

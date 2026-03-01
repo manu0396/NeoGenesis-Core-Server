@@ -42,10 +42,11 @@ object AuditBundleBuilder {
         val twin = twinMetricsRepository.listByJob(jobId, null, null, 5_000)
         val audit = auditLogRepository.listByJob(jobId, 10_000)
 
+        val prefix = sanitizeJobId(jobId)
         val files = LinkedHashMap<String, ByteArray>()
-        files["telemetry.csv"] = buildTelemetryCsv(telemetry).toByteArray(Charsets.UTF_8)
-        files["twin.csv"] = buildTwinCsv(twin).toByteArray(Charsets.UTF_8)
-        files["audit.csv"] = buildAuditCsv(audit).toByteArray(Charsets.UTF_8)
+        files["$prefix-telemetry.csv"] = buildTelemetryCsv(telemetry).toByteArray(Charsets.UTF_8)
+        files["$prefix-twin.csv"] = buildTwinCsv(twin).toByteArray(Charsets.UTF_8)
+        files["$prefix-audit.csv"] = buildAuditCsv(audit).toByteArray(Charsets.UTF_8)
 
         val fileHashes =
             files.map { (name, content) ->
@@ -66,6 +67,11 @@ object AuditBundleBuilder {
 
         val zipBytes = buildZip(files, manifest, chain)
         return AuditBundle(bytes = zipBytes, manifest = manifest)
+    }
+
+    private fun sanitizeJobId(jobId: String): String {
+        val filtered = jobId.replace(Regex("[^A-Za-z0-9_-]+"), "_")
+        return filtered.ifBlank { "job" }
     }
 
     private fun buildZip(

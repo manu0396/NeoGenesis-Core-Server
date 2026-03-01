@@ -1,61 +1,28 @@
 replicaCount: 1
 
 image:
-  repository: neogenesis-core-server
-  tag: "1.0.0"
+  repository: neoGenesis/core-server
+  tag: latest
   pullPolicy: IfNotPresent
 
 service:
   type: ClusterIP
   port: 8080
-  grpcPort: 50051
-
-resources:
-  limits:
-    cpu: "2"
-    memory: "2Gi"
-  requests:
-    cpu: "500m"
-    memory: "1Gi"
-
-env:
-  NEOGENESIS_RUNTIME_ENVIRONMENT: production
-  NEOGENESIS_HTTP_HOST: "0.0.0.0"
-  NEOGENESIS_HTTP_PORT: "8080"
-  NEOGENESIS_GRPC_PORT: "50051"
-  NEOGENESIS_METRICS_PATH: "/metrics"
-  EVIDENCE_PACK_MODE: "true"
-  AUDIT_BUNDLE_MODE: "true"
-  ADMIN_API_MODE: "false"
-  ADMIN_WEB_MODE: "false"
-  COMPLIANCE_MODE: "false"
-
-secrets:
-  enabled: true
-  existingSecretName: "neogenesis-core-secrets"
-  keys:
-    jwtSecret: "JWT_SECRET"
-    dbPassword: "DB_PASSWORD"
-    phiKeyB64: "NEOGENESIS_PHI_KEY_B64"
-    piiKeyB64: "NEOGENESIS_PII_KEY_B64"
-  inline:
-    jwtSecret: ""
-    dbPassword: ""
-    phiKeyB64: ""
-    piiKeyB64: ""
-
-database:
-  enabled: true
-  host: "neogenesis-postgres"
-  port: 5432
-  name: "neogenesis"
-  user: "neogenesis"
-  password: "change-me"
-  storage:
-    size: "10Gi"
 
 postgres:
+  host: postgres
+  port: 5432
+  database: neogenesis
+  user: neogenesis
+  password: neogenesis
+
+admin:
   enabled: true
-  image: "postgres:15"
-  storage:
-    size: "10Gi"
+  user: admin
+  password: admin-password
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
