@@ -16,7 +16,7 @@ ADMIN_WEB_OIDC_SCOPE="openid email profile"
 ```
 
 ## Admin Web UI (Vite)
-From repo root:
+From repo root (Windows PowerShell):
 ```
 cd admin-web
 npm install
