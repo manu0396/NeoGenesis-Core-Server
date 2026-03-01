@@ -502,6 +502,8 @@ fun Application.module() {
         }
         if (appConfig.adminWeb.enabled) {
             adminWebModule(
+                dataSource = dataSource,
+                config = appConfig.adminWeb,
                 auditTrailService = auditTrailService,
             )
         }

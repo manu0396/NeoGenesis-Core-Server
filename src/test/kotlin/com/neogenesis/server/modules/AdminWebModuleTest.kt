@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 
 class AdminWebModuleTest {
     @Test
-    fun `admin web status requires correlation id`() =
+    fun `admin web status requires tenant and correlation id`() =
         testApplication {
             environment {
                 config = testConfig()
@@ -39,6 +39,7 @@ class AdminWebModuleTest {
                 client.get("/admin/web/status") {
                     header(HttpHeaders.Authorization, "Bearer $token")
                     header("X-Correlation-Id", "corr-1")
+                    url.parameters.append("tenant_id", "tenant-a")
                 }
             assertEquals(HttpStatusCode.OK, ok.status)
         }
