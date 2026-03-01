@@ -53,6 +53,26 @@ interface RegenOpsStore {
         protocolId: String? = null,
     ): RegenProtocolVersion?
 
+    fun requestPublishApproval(
+        tenantId: String,
+        protocolId: String,
+        requestedBy: String,
+        reason: String?,
+    ): ProtocolPublishApproval
+
+    fun approvePublishApproval(
+        tenantId: String,
+        approvalId: String,
+        approvedBy: String,
+        comment: String?,
+    ): ProtocolPublishApproval
+
+    fun consumePublishApproval(
+        tenantId: String,
+        protocolId: String,
+        publisherId: String,
+    ): ProtocolPublishApproval?
+
     fun createRun(
         tenantId: String,
         runId: String,

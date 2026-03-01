@@ -18,6 +18,7 @@ import com.neogenesis.server.application.regenops.RegenEvidenceChainStatus
 import com.neogenesis.server.application.regenops.RegenEvidenceEvent
 import com.neogenesis.server.application.regenops.RegenGateway
 import com.neogenesis.server.application.regenops.RegenOpsStore
+import com.neogenesis.server.application.regenops.ProtocolPublishApproval
 import com.neogenesis.server.application.regenops.RegenProtocolDraft
 import com.neogenesis.server.application.regenops.RegenProtocolSummary
 import com.neogenesis.server.application.regenops.RegenProtocolVersion
@@ -147,6 +148,86 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
                 s.setString(1, tenantId); if (withProtocol) s.setString(2, protocolId)
                 s.executeQuery().use { rs -> if (!rs.next()) null else rs.toProtocolVersion() }
             }
+        }
+    }
+
+    override fun requestPublishApproval(
+        tenantId: String,
+        protocolId: String,
+        requestedBy: String,
+        reason: String?,
+    ): ProtocolPublishApproval {
+        val id = java.util.UUID.randomUUID().toString()
+        val now = Timestamp.from(Instant.now())
+        dataSource.connection.use { c ->
+            c.prepareStatement(
+                "INSERT INTO protocol_publish_approvals(id,tenant_id,protocol_id,status,requested_by,requested_at,reason) VALUES (?,?,?,?,?,?,?)",
+            ).use { s ->
+                s.setString(1, id)
+                s.setString(2, tenantId)
+                s.setString(3, protocolId)
+                s.setString(4, "PENDING")
+                s.setString(5, requestedBy)
+                s.setTimestamp(6, now)
+                s.setString(7, reason)
+                s.executeUpdate()
+            }
+        }
+        return getPublishApproval(tenantId, id) ?: error("failed to create approval")
+    }
+
+    override fun approvePublishApproval(
+        tenantId: String,
+        approvalId: String,
+        approvedBy: String,
+        comment: String?,
+    ): ProtocolPublishApproval {
+        val now = Timestamp.from(Instant.now())
+        val rows =
+            dataSource.connection.use { c ->
+                c.prepareStatement(
+                    "UPDATE protocol_publish_approvals SET status='APPROVED',approved_by=?,approved_at=?,approval_comment=? WHERE tenant_id=? AND id=? AND status='PENDING'",
+                ).use { s ->
+                    s.setString(1, approvedBy)
+                    s.setTimestamp(2, now)
+                    s.setString(3, comment)
+                    s.setString(4, tenantId)
+                    s.setString(5, approvalId)
+                    s.executeUpdate()
+                }
+            }
+        if (rows == 0) throw BadRequestException("approval_missing", "Approval not found or already processed")
+        return getPublishApproval(tenantId, approvalId) ?: error("failed to load approval")
+    }
+
+    override fun consumePublishApproval(
+        tenantId: String,
+        protocolId: String,
+        publisherId: String,
+    ): ProtocolPublishApproval? {
+        return dataSource.inTransaction { c ->
+            val approval =
+                c.prepareStatement(
+                    "SELECT id FROM protocol_publish_approvals WHERE tenant_id=? AND protocol_id=? AND status='APPROVED' AND consumed_by IS NULL AND approved_by <> ? ORDER BY approved_at DESC LIMIT 1",
+                ).use { s ->
+                    s.setString(1, tenantId)
+                    s.setString(2, protocolId)
+                    s.setString(3, publisherId)
+                    s.executeQuery().use { rs -> if (rs.next()) rs.getString("id") else null }
+                } ?: return@inTransaction null
+
+            val rows =
+                c.prepareStatement(
+                    "UPDATE protocol_publish_approvals SET status='CONSUMED',consumed_by=?,consumed_at=? WHERE tenant_id=? AND id=? AND consumed_by IS NULL",
+                ).use { s ->
+                    s.setString(1, publisherId)
+                    s.setTimestamp(2, Timestamp.from(Instant.now()))
+                    s.setString(3, tenantId)
+                    s.setString(4, approval)
+                    s.executeUpdate()
+                }
+            if (rows == 0) return@inTransaction null
+            getPublishApproval(c, tenantId, approval)
         }
     }
 
@@ -397,6 +478,45 @@ class JdbcRegenOpsStore(private val dataSource: DataSource) : RegenOpsStore {
         return c.prepareStatement("SELECT event_hash FROM regen_evidence_events WHERE tenant_id=? ORDER BY id DESC LIMIT 1").use { s ->
             s.setString(1, tenantId)
             s.executeQuery().use { rs -> if (rs.next()) rs.getString("event_hash") else null }
+        }
+    }
+
+    private fun getPublishApproval(
+        tenantId: String,
+        approvalId: String,
+    ): ProtocolPublishApproval? {
+        return dataSource.connection.use { c ->
+            getPublishApproval(c, tenantId, approvalId)
+        }
+    }
+
+    private fun getPublishApproval(
+        connection: Connection,
+        tenantId: String,
+        approvalId: String,
+    ): ProtocolPublishApproval? {
+        return connection.prepareStatement(
+            "SELECT id,tenant_id,protocol_id,status,requested_by,requested_at,reason,approved_by,approved_at,approval_comment,consumed_by,consumed_at FROM protocol_publish_approvals WHERE tenant_id=? AND id=?",
+        ).use { s ->
+            s.setString(1, tenantId)
+            s.setString(2, approvalId)
+            s.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                ProtocolPublishApproval(
+                    id = rs.getString("id"),
+                    tenantId = rs.getString("tenant_id"),
+                    protocolId = rs.getString("protocol_id"),
+                    status = rs.getString("status"),
+                    requestedBy = rs.getString("requested_by"),
+                    requestedAtMs = rs.getTimestamp("requested_at").time,
+                    reason = rs.getString("reason"),
+                    approvedBy = rs.getString("approved_by"),
+                    approvedAtMs = rs.getTimestamp("approved_at")?.time,
+                    approvalComment = rs.getString("approval_comment"),
+                    consumedBy = rs.getString("consumed_by"),
+                    consumedAtMs = rs.getTimestamp("consumed_at")?.time,
+                )
+            }
         }
     }
 

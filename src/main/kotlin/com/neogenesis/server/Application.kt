@@ -4,6 +4,7 @@ import com.neogenesis.server.application.AuditTrailService
 import com.neogenesis.server.application.ControlDecisionService
 import com.neogenesis.server.application.InMemoryTelemetrySnapshotService
 import com.neogenesis.server.application.billing.BillingService
+import com.neogenesis.server.application.compliance.LoggingComplianceHooks
 import com.neogenesis.server.application.regenops.RegenOpsService
 import com.neogenesis.server.application.sre.LatencyBudgetService
 import com.neogenesis.server.application.telemetry.AdvancedBioSimulationService
@@ -61,11 +62,13 @@ import com.neogenesis.server.modules.authModule
 import com.neogenesis.server.modules.admin.adminWebModule
 import com.neogenesis.server.modules.admin.adminApiModule
 import com.neogenesis.server.modules.billingModule
+import com.neogenesis.server.modules.benchmark.benchmarkModule
 import com.neogenesis.server.modules.bioinkModule
 import com.neogenesis.server.modules.commercial.CommercialRepository
 import com.neogenesis.server.modules.commercial.CommercialService
 import com.neogenesis.server.modules.commercial.commercialModule
 import com.neogenesis.server.modules.connectors.connectorCertificationModule
+import com.neogenesis.server.modules.demo.simulatorModule
 import com.neogenesis.server.modules.evidence.evidencePackModule
 import com.neogenesis.server.modules.evidence.auditBundleModule
 import com.neogenesis.server.modules.devicesModule
@@ -127,6 +130,19 @@ fun Application.module() {
     val jwtVerifier = JwtVerifierFactory.create(resolvedSecurityConfig.jwt, secretResolver)
     val dataSource = DatabaseFactory(appConfig.database).initialize()
     val serverVersion = readServerVersion()
+    val regenOpsStore = JdbcRegenOpsStore(dataSource)
+    val complianceHooks =
+        LoggingComplianceHooks(
+            esignEnabled = appConfig.compliance.esignEnabled,
+            scimEnabled = appConfig.compliance.scimEnabled,
+            samlEnabled = appConfig.compliance.samlEnabled,
+        )
+    val regenOpsService =
+        RegenOpsService(
+            store = regenOpsStore,
+            complianceConfig = appConfig.compliance,
+            complianceHooks = complianceHooks,
+        )
 
     val userRepository = UserRepository(dataSource)
     val deviceRepository = DeviceRepository(dataSource)
@@ -386,7 +402,6 @@ fun Application.module() {
                         tracingInterceptor,
                     )
 
-                val regenOpsService = RegenOpsService(JdbcRegenOpsStore(dataSource))
                 val protocolServiceDefinition =
                     ServerInterceptors.intercept(
                         RegenProtocolGrpcService(regenOpsService),
@@ -492,6 +507,9 @@ fun Application.module() {
         billingModule(
             billingService = billingService,
         )
+        benchmarkModule(
+            dataSource = dataSource,
+        )
         if (appConfig.commercial.enabled) {
             commercialModule(
                 service = commercialService,
@@ -513,8 +531,16 @@ fun Application.module() {
             adminApiModule(
                 dataSource = dataSource,
                 auditTrailService = auditTrailService,
+                passwordService = passwordService,
+                regenOpsService = regenOpsService,
+                complianceEnabled = appConfig.compliance.enabled,
             )
         }
+        simulatorModule(
+            regenOpsService = regenOpsService,
+            regenOpsStore = regenOpsStore,
+            complianceEnabled = appConfig.compliance.enabled,
+        )
         if (appConfig.evidencePack.enabled) {
             evidencePackModule(
                 jobRepository = jobRepository,
@@ -523,6 +549,8 @@ fun Application.module() {
                 auditLogRepository = auditLogRepository,
                 serverVersion = serverVersion,
                 auditTrailService = auditTrailService,
+                regenOpsStore = regenOpsStore,
+                eventChainEnabled = appConfig.evidencePack.eventChainEnabled,
             )
         }
         if (appConfig.auditBundle.enabled) {

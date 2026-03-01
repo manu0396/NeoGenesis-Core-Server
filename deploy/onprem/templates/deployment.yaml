@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neogenesis-core-server
+  labels:
+    app: neogenesis-core-server
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: neogenesis-core-server
+  template:
+    metadata:
+      labels:
+        app: neogenesis-core-server
+    spec:
+      containers:
+        - name: core-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+            - name: grpc
+              containerPort: {{ .Values.service.grpcPort }}
+          env:
+            - name: NEOGENESIS_HTTP_PORT
+              value: "{{ .Values.service.port }}"
+            - name: NEOGENESIS_GRPC_PORT
+              value: "{{ .Values.service.grpcPort }}"
+            - name: DB_URL
+              value: "jdbc:postgresql://{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+            - name: DB_USER
+              value: "{{ .Values.database.user }}"
+            - name: DB_PASSWORD
+{{- if .Values.secrets.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecretName }}
+                  key: {{ .Values.secrets.keys.dbPassword }}
+{{- else }}
+              value: "{{ .Values.secrets.inline.dbPassword }}"
+{{- end }}
+            - name: JWT_SECRET
+{{- if .Values.secrets.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecretName }}
+                  key: {{ .Values.secrets.keys.jwtSecret }}
+{{- else }}
+              value: "{{ .Values.secrets.inline.jwtSecret }}"
+{{- end }}
+            - name: NEOGENESIS_PHI_KEY_B64
+{{- if .Values.secrets.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecretName }}
+                  key: {{ .Values.secrets.keys.phiKeyB64 }}
+{{- else }}
+              value: "{{ .Values.secrets.inline.phiKeyB64 }}"
+{{- end }}
+            - name: NEOGENESIS_PII_KEY_B64
+{{- if .Values.secrets.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecretName }}
+                  key: {{ .Values.secrets.keys.piiKeyB64 }}
+{{- else }}
+              value: "{{ .Values.secrets.inline.piiKeyB64 }}"
+{{- end }}
+          envFrom:
+            - configMapRef:
+                name: neogenesis-core-env
+          resources:
+{{ toYaml .Values.resources | indent 12 }}

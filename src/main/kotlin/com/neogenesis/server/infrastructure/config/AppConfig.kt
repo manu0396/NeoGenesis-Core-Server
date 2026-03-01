@@ -16,6 +16,15 @@ data class AppConfig(
     val resilience: ResilienceConfig,
     val control: ControlConfig,
     val serverless: ServerlessConfig,
+    val compliance: ComplianceConfig =
+        ComplianceConfig(
+            enabled = false,
+            retentionDays = 3650,
+            wormModeEnabled = false,
+            esignEnabled = false,
+            scimEnabled = false,
+            samlEnabled = false,
+        ),
     val billing: BillingConfig,
     val commercial: CommercialConfig =
         CommercialConfig(
@@ -36,6 +45,7 @@ data class AppConfig(
     val evidencePack: EvidencePackConfig =
         EvidencePackConfig(
             enabled = false,
+            eventChainEnabled = false,
         ),
     val auditBundle: AuditBundleConfig =
         AuditBundleConfig(
@@ -128,6 +138,7 @@ data class AppConfig(
 
     data class EvidencePackConfig(
         val enabled: Boolean,
+        val eventChainEnabled: Boolean,
     )
 
     data class AuditBundleConfig(
@@ -313,6 +324,15 @@ data class AppConfig(
             val emulatorHost: String?,
         )
     }
+
+    data class ComplianceConfig(
+        val enabled: Boolean,
+        val retentionDays: Int,
+        val wormModeEnabled: Boolean,
+        val esignEnabled: Boolean,
+        val scimEnabled: Boolean,
+        val samlEnabled: Boolean,
+    )
 
     data class BillingConfig(
         val enabled: Boolean,
@@ -678,6 +698,34 @@ data class AppConfig(
                         ),
                 )
 
+            val complianceConfig =
+                ComplianceConfig(
+                    enabled =
+                        env("COMPLIANCE_MODE")?.equals("true", ignoreCase = true)
+                            ?: config.bool("neogenesis.compliance.mode")
+                            ?: false,
+                    retentionDays =
+                        env("COMPLIANCE_RETENTION_DAYS")?.toIntOrNull()
+                            ?: config.string("neogenesis.compliance.retentionDays")?.toIntOrNull()
+                            ?: 3650,
+                    wormModeEnabled =
+                        env("COMPLIANCE_WORM_MODE")?.equals("true", ignoreCase = true)
+                            ?: config.bool("neogenesis.compliance.wormModeEnabled")
+                            ?: false,
+                    esignEnabled =
+                        env("COMPLIANCE_ESIGN_ENABLED")?.equals("true", ignoreCase = true)
+                            ?: config.bool("neogenesis.compliance.esignEnabled")
+                            ?: false,
+                    scimEnabled =
+                        env("COMPLIANCE_SCIM_ENABLED")?.equals("true", ignoreCase = true)
+                            ?: config.bool("neogenesis.compliance.scimEnabled")
+                            ?: false,
+                    samlEnabled =
+                        env("COMPLIANCE_SAML_ENABLED")?.equals("true", ignoreCase = true)
+                            ?: config.bool("neogenesis.compliance.samlEnabled")
+                            ?: false,
+                )
+
             val billingConfig =
                 BillingConfig(
                     enabled =
@@ -751,6 +799,7 @@ data class AppConfig(
                 resilience = resilienceConfig,
                 control = controlConfig,
                 serverless = serverlessConfig,
+                compliance = complianceConfig,
                 billing = billingConfig,
                 commercial =
                     CommercialConfig(
@@ -797,6 +846,10 @@ data class AppConfig(
                         enabled =
                             env("EVIDENCE_PACK_MODE")?.equals("true", ignoreCase = true)
                                 ?: config.bool("neogenesis.evidence.pack.mode")
+                                ?: false,
+                        eventChainEnabled =
+                            env("EVIDENCE_EVENT_CHAIN_ENABLED")?.equals("true", ignoreCase = true)
+                                ?: config.bool("neogenesis.evidence.pack.eventChainEnabled")
                                 ?: false,
                     ),
                 auditBundle =

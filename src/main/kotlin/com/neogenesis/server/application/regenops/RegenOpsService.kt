@@ -1,7 +1,9 @@
 ﻿package com.neogenesis.server.application.regenops
 
+import com.neogenesis.server.application.compliance.ComplianceHooks
 import com.neogenesis.server.application.error.BadRequestException
 import com.neogenesis.server.application.error.ConflictException
+import com.neogenesis.server.infrastructure.config.AppConfig
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -10,6 +12,15 @@ import kotlin.math.max
 class RegenOpsService(
     private val store: RegenOpsStore,
     private val driftThreshold: Double = 0.2,
+    private val complianceConfig: AppConfig.ComplianceConfig = AppConfig.ComplianceConfig(
+        enabled = false,
+        retentionDays = 3650,
+        wormModeEnabled = false,
+        esignEnabled = false,
+        scimEnabled = false,
+        samlEnabled = false,
+    ),
+    private val complianceHooks: ComplianceHooks = ComplianceHooks.noop(),
 ) {
     fun createDraft(
         tenantId: String,
@@ -62,9 +73,32 @@ class RegenOpsService(
     ): RegenProtocolVersion {
         val normalizedTenant = normalizeTenant(tenantId)
         val normalizedProtocol = normalizeProtocol(protocolId)
+        if (complianceConfig.enabled) {
+            val approval =
+                store.consumePublishApproval(
+                    tenantId = normalizedTenant,
+                    protocolId = normalizedProtocol,
+                    publisherId = normalizeActor(actorId),
+                )
+                    ?: throw BadRequestException(
+                        code = "approval_required",
+                        message = "Dual-control approval is required to publish protocol versions",
+                    )
+            if (approval.approvedBy == actorId) {
+                throw BadRequestException(
+                    code = "dual_control_violation",
+                    message = "Approver must be different from publisher",
+                )
+            }
+            complianceHooks.onApprovalConsumed(approval)
+        }
         val draft =
             store.getDraft(normalizedTenant, normalizedProtocol)
                 ?: throw BadRequestException(code = "protocol_draft_missing", message = "Draft does not exist")
+        val wrappedDsl = wrapProtocolDsl(draft.contentJson)
+        if (wrappedDsl.dslVersion == "1") {
+            requireValidProtocolDsl(wrappedDsl)
+        }
         val nextVersion = store.nextProtocolVersion(normalizedTenant, normalizedProtocol)
         val version =
             store.insertProtocolVersion(
@@ -72,7 +106,7 @@ class RegenOpsService(
                 protocolId = normalizedProtocol,
                 version = nextVersion,
                 title = draft.title,
-                contentJson = draft.contentJson,
+                contentJson = if (wrappedDsl.dslVersion == "1") serializeProtocolDsl(wrappedDsl) else draft.contentJson,
                 publishedBy = normalizeActor(actorId),
                 changelog = changelog.trim(),
             )
@@ -90,6 +124,67 @@ class RegenOpsService(
                 }.toString(),
         )
         return version
+    }
+
+    fun requestPublishApproval(
+        tenantId: String,
+        protocolId: String,
+        actorId: String,
+        reason: String?,
+    ): ProtocolPublishApproval {
+        val normalizedTenant = normalizeTenant(tenantId)
+        val normalizedProtocol = normalizeProtocol(protocolId)
+        val approval =
+            store.requestPublishApproval(
+                tenantId = normalizedTenant,
+                protocolId = normalizedProtocol,
+                requestedBy = normalizeActor(actorId),
+                reason = reason?.trim()?.ifBlank { null },
+            )
+        appendEvidence(
+            tenantId = normalizedTenant,
+            actionType = "protocol.publish.approval.requested",
+            actorId = normalizeActor(actorId),
+            resourceType = "protocol",
+            resourceId = normalizedProtocol,
+            payloadJson =
+                buildJsonObject {
+                    put("approvalId", approval.id)
+                    put("protocolId", normalizedProtocol)
+                }.toString(),
+        )
+        complianceHooks.onApprovalRequested(approval)
+        return approval
+    }
+
+    fun approvePublishApproval(
+        tenantId: String,
+        approvalId: String,
+        actorId: String,
+        comment: String?,
+    ): ProtocolPublishApproval {
+        val normalizedTenant = normalizeTenant(tenantId)
+        val approval =
+            store.approvePublishApproval(
+                tenantId = normalizedTenant,
+                approvalId = approvalId.trim(),
+                approvedBy = normalizeActor(actorId),
+                comment = comment?.trim()?.ifBlank { null },
+            )
+        appendEvidence(
+            tenantId = normalizedTenant,
+            actionType = "protocol.publish.approval.approved",
+            actorId = normalizeActor(actorId),
+            resourceType = "protocol_approval",
+            resourceId = approval.id,
+            payloadJson =
+                buildJsonObject {
+                    put("approvalId", approval.id)
+                    put("protocolId", approval.protocolId)
+                }.toString(),
+        )
+        complianceHooks.onApprovalApproved(approval)
+        return approval
     }
 
     fun listProtocols(

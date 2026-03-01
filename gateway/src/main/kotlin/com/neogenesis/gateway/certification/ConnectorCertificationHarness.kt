@@ -5,6 +5,7 @@ import com.neogenesis.gateway.connector.Driver
 import com.neogenesis.gateway.connector.DriverContext
 import com.neogenesis.gateway.connector.DriverHealth
 import com.neogenesis.gateway.connector.ExampleConnectorDriver
+import com.neogenesis.gateway.connector.SimulatedConnectorDriver
 import com.neogenesis.gateway.connector.SandboxedDriver
 import com.neogenesis.gateway.connector.TelemetryEvent
 import com.neogenesis.gateway.connector.TelemetryField
@@ -39,6 +40,8 @@ data class CertificationReport(
     val meanLatencyMs: Double,
     val p95LatencyMs: Double,
     val reconnectLatencyMs: Long,
+    val reconnectAttempts: Int,
+    val reconnectSuccess: Boolean,
     val status: String,
     val generatedAt: Instant,
     val driverId: String,
@@ -96,12 +99,17 @@ private suspend fun runCertification(config: CertificationConfig): Certification
     val latenciesMs = mutableListOf<Long>()
     var received = 0
     var reconnectLatencyMs = 0L
+    var reconnectAttempts = 0
+    var reconnectSuccess = true
     for (index in 1..config.events) {
         if (index == config.reconnectAt) {
-            driver.stop()
+            reconnectAttempts += 1
+            runCatching { driver.stop() }
+                .onFailure { reconnectSuccess = false }
             delay(config.reconnectDelayMs)
             val reconnectStart = System.nanoTime()
-            driver.start()
+            runCatching { driver.start() }
+                .onFailure { reconnectSuccess = false }
             reconnectLatencyMs = nanosToMs(System.nanoTime() - reconnectStart)
         }
         val start = System.nanoTime()
@@ -120,6 +128,7 @@ private suspend fun runCertification(config: CertificationConfig): Certification
     val status =
         when {
             dropRate > 0.1 -> "fail"
+            !reconnectSuccess -> "warn"
             p95LatencyMs > 1_000 -> "warn"
             else -> "pass"
         }
@@ -134,6 +143,8 @@ private suspend fun runCertification(config: CertificationConfig): Certification
         meanLatencyMs = stats.meanMs,
         p95LatencyMs = stats.p95Ms,
         reconnectLatencyMs = reconnectLatencyMs,
+        reconnectAttempts = reconnectAttempts,
+        reconnectSuccess = reconnectSuccess,
         status = status,
         generatedAt = Instant.now(),
         driverId = config.driverId,
@@ -221,6 +232,8 @@ private fun CertificationReport.toJson(): String {
           "meanLatencyMs": $meanLatencyMs,
           "p95LatencyMs": $p95LatencyMs,
           "reconnectLatencyMs": $reconnectLatencyMs,
+          "reconnectAttempts": $reconnectAttempts,
+          "reconnectSuccess": $reconnectSuccess,
           "status": "$status",
           "generatedAt": "$generatedAt"
         }
@@ -240,6 +253,8 @@ private fun CertificationReport.toMarkdown(): String {
         |- Mean latency (ms): ${"%.2f".format(meanLatencyMs)}
         |- P95 latency (ms): ${"%.2f".format(p95LatencyMs)}
         |- Reconnect latency (ms): $reconnectLatencyMs
+        |- Reconnect attempts: $reconnectAttempts
+        |- Reconnect success: $reconnectSuccess
         |- Generated at: $generatedAt
         |
     """.trimMargin()
@@ -248,6 +263,7 @@ private fun CertificationReport.toMarkdown(): String {
 private fun createDriver(driverId: String, dropRate: Double): Driver {
     return when (driverId) {
         "example-driver" -> ExampleConnectorDriver()
+        "simulated-connector" -> SimulatedConnectorDriver()
         else -> SimulatedDriver(dropRate = dropRate)
     }
 }
