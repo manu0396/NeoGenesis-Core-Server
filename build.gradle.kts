@@ -1,8 +1,8 @@
 import com.google.protobuf.gradle.*
 val ktorVersion = "3.0.3"
-val grpcVersion = "1.61.0"
+val grpcVersion = "1.62.2"
 val grpcKotlinVersion = "1.4.1"
-val protobufVersion = "3.25.2"
+val protobufVersion = "3.25.5"
 val coroutinesVersion = "1.8.1"
 val serializationVersion = "1.7.3"
 val logbackVersion = "1.4.14"
@@ -10,6 +10,8 @@ val micrometerVersion = "1.12.11"
 val flywayVersion = "10.17.3"
 val hikariVersion = "5.1.0"
 val otelVersion = "1.43.0"
+val nettyVersion = "4.1.124.Final"
+val postgresqlVersion = "42.7.7"
 
 plugins {
     kotlin("jvm") version "2.0.21"
@@ -30,6 +32,8 @@ repositories {
 }
 
 dependencies {
+    implementation(enforcedPlatform("io.netty:netty-bom:$nettyVersion"))
+
     implementation("io.ktor:ktor-server-core-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-netty-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-call-logging-jvm:$ktorVersion")
@@ -66,7 +70,7 @@ dependencies {
     implementation("io.grpc:grpc-services:$grpcVersion")
     implementation("com.zaxxer:HikariCP:$hikariVersion")
     implementation("org.flywaydb:flyway-core:$flywayVersion")
-    runtimeOnly("org.postgresql:postgresql:42.7.4")
+    runtimeOnly("org.postgresql:postgresql:$postgresqlVersion")
     runtimeOnly("com.h2database:h2:2.2.224")
 
     implementation("io.micrometer:micrometer-registry-prometheus:$micrometerVersion")
@@ -75,6 +79,21 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host-jvm:$ktorVersion")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+
+    constraints {
+        implementation("io.netty:netty-handler:$nettyVersion") {
+            because("Fixes GHSA-4g8c-wm8x-jfhw / CVE-2025-24970")
+        }
+        implementation("io.netty:netty-codec-http2:$nettyVersion") {
+            because("Fixes GHSA-prj3-ccx8-p6x4 / CVE-2025-55163")
+        }
+        implementation("com.google.protobuf:protobuf-java:$protobufVersion") {
+            because("Fixes GHSA-735f-pc8j-v9w8")
+        }
+        runtimeOnly("org.postgresql:postgresql:$postgresqlVersion") {
+            because("Fixes GHSA-hq9p-pm7w-8p54")
+        }
+    }
 }
 
 kotlin {
