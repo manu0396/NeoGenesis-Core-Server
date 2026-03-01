@@ -26,11 +26,12 @@ fun Route.adminWebModule(
 ) {
     authenticate("auth-jwt") {
         get("/admin/web") {
-            val principal = call.principal<NeoGenesisPrincipal>()
-                ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
+            val principal =
+                call.principal<NeoGenesisPrincipal>()
+                    ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
             requireAdminOrFounder(principal)
             val tenantId = call.requireTenantId()
-            val correlationId = requireCorrelationId()
+            val correlationId = call.requireCorrelationId()
             requireTenantMatch(principal, tenantId)
             auditTrailService.record(
                 AuditEvent(
@@ -50,28 +51,29 @@ fun Route.adminWebModule(
             call.respondText(
                 text =
                     """
-                        <!doctype html>
-                        <html lang="en">
-                          <head>
-                            <meta charset="utf-8">
-                            <title>NeoGenesis Admin</title>
-                          </head>
-                          <body>
-                            <h1>NeoGenesis Admin Console</h1>
-                            <p>Placeholder shell for enterprise admin UI.</p>
-                          </body>
-                        </html>
-                    """.trimIndent(),
+                        |<!doctype html>
+                        |<html lang="en">
+                        |  <head>
+                        |    <meta charset="utf-8">
+                        |    <title>NeoGenesis Admin</title>
+                        |  </head>
+                        |  <body>
+                        |    <h1>NeoGenesis Admin Console</h1>
+                        |    <p>Placeholder shell for enterprise admin UI.</p>
+                        |  </body>
+                        |</html>
+                    """.trimMargin(),
                 contentType = ContentType.Text.Html,
             )
         }
 
         get("/admin/web/status") {
-            val principal = call.principal<NeoGenesisPrincipal>()
-                ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
+            val principal =
+                call.principal<NeoGenesisPrincipal>()
+                    ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
             requireAdminOrFounder(principal)
             val tenantId = call.requireTenantId()
-            val correlationId = requireCorrelationId()
+            val correlationId = call.requireCorrelationId()
             requireTenantMatch(principal, tenantId)
             auditTrailService.record(
                 AuditEvent(
@@ -97,11 +99,12 @@ fun Route.adminWebModule(
         }
 
         get("/admin/web/login/oidc") {
-            val principal = call.principal<NeoGenesisPrincipal>()
-                ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
+            val principal =
+                call.principal<NeoGenesisPrincipal>()
+                    ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
             requireAdminOrFounder(principal)
             val tenantId = call.requireTenantId()
-            val correlationId = requireCorrelationId()
+            val correlationId = call.requireCorrelationId()
             requireTenantMatch(principal, tenantId)
             val authUrl = config.oidcAuthUrl
             val clientId = config.oidcClientId
@@ -133,17 +136,17 @@ fun Route.adminWebModule(
                     scope = scope,
                     state = correlationId,
                 )
-            call.respondText("", status = HttpStatusCode.Found) {
-                headers.append("Location", redirect)
-            }
+            call.response.headers.append("Location", redirect)
+            call.respondText("", status = HttpStatusCode.Found)
         }
 
         get("/admin/web/gateways") {
-            val principal = call.principal<NeoGenesisPrincipal>()
-                ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
+            val principal =
+                call.principal<NeoGenesisPrincipal>()
+                    ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
             requireAdminOrFounder(principal)
             val tenantId = call.requireTenantId()
-            val correlationId = requireCorrelationId()
+            val correlationId = call.requireCorrelationId()
             requireTenantMatch(principal, tenantId)
             auditTrailService.record(
                 AuditEvent(
@@ -162,15 +165,16 @@ fun Route.adminWebModule(
             )
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
             val gateways = listGateways(dataSource, tenantId, limit)
-            call.respond(AdminGatewayResponse(gateways = gateways))
+            call.respond(AdminWebGatewayResponse(gateways = gateways))
         }
 
         get("/admin/web/gateways/export") {
-            val principal = call.principal<NeoGenesisPrincipal>()
-                ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
+            val principal =
+                call.principal<NeoGenesisPrincipal>()
+                    ?: throw ApiException("unauthorized", "unauthorized", HttpStatusCode.Unauthorized)
             requireAdminOrFounder(principal)
             val tenantId = call.requireTenantId()
-            val correlationId = requireCorrelationId()
+            val correlationId = call.requireCorrelationId()
             requireTenantMatch(principal, tenantId)
             auditTrailService.record(
                 AuditEvent(
@@ -231,7 +235,7 @@ private fun listGateways(
     dataSource: DataSource,
     tenantId: String,
     limit: Int,
-): List<AdminGatewaySummary> {
+): List<AdminWebGatewaySummary> {
     return dataSource.connection.use { connection ->
         connection.prepareStatement(
             """
@@ -248,7 +252,7 @@ private fun listGateways(
                 buildList {
                     while (rs.next()) {
                         add(
-                            AdminGatewaySummary(
+                            AdminWebGatewaySummary(
                                 id = rs.getString("id"),
                                 name = rs.getString("name"),
                                 tenantId = tenantId,
@@ -262,7 +266,7 @@ private fun listGateways(
     }
 }
 
-private fun buildGatewayCsv(gateways: List<AdminGatewaySummary>): String {
+private fun buildGatewayCsv(gateways: List<AdminWebGatewaySummary>): String {
     val header = "gateway_id,name,tenant_id,created_at"
     val rows = gateways.map { "${it.id},${it.name},${it.tenantId},${it.createdAt}" }
     return (listOf(header) + rows).joinToString("\n")
@@ -298,7 +302,7 @@ data class AdminWebStatus(
 )
 
 @Serializable
-data class AdminGatewaySummary(
+data class AdminWebGatewaySummary(
     val id: String,
     val name: String,
     val tenantId: String,
@@ -306,6 +310,6 @@ data class AdminGatewaySummary(
 )
 
 @Serializable
-data class AdminGatewayResponse(
-    val gateways: List<AdminGatewaySummary>,
+data class AdminWebGatewayResponse(
+    val gateways: List<AdminWebGatewaySummary>,
 )

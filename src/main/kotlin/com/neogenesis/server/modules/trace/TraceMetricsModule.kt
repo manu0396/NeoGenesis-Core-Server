@@ -1,8 +1,8 @@
 package com.neogenesis.server.modules.trace
 
+import com.neogenesis.server.application.regenops.RegenDriftAlert
 import com.neogenesis.server.application.regenops.RegenOpsService
 import com.neogenesis.server.application.regenops.RegenOpsStore
-import com.neogenesis.server.application.regenops.RegenDriftAlert
 import com.neogenesis.server.infrastructure.persistence.CanonicalRole
 import com.neogenesis.server.infrastructure.security.enforceRole
 import com.neogenesis.server.modules.ApiException
@@ -30,7 +30,11 @@ fun Route.traceMetricsModule(
             val tenantId = call.requireTenantId()
             val runId = call.request.queryParameters["run_id"]?.trim().orEmpty()
             val baselineWindow = call.request.queryParameters["baseline_n"]?.toIntOrNull() ?: 5
-            val metricKey = call.request.queryParameters["metric_key"]?.trim().orEmpty().ifBlank { "pressure_kpa" }
+            val metricKey =
+                call.request.queryParameters["metric_key"]
+                    ?.trim()
+                    .orEmpty()
+                    .ifBlank { "pressure_kpa" }
             val zThreshold = call.request.queryParameters["z_threshold"]?.toDoubleOrNull() ?: 3.0
 
             val resolvedRunId = if (runId.isBlank()) latestRunId(dataSource, tenantId) else runId
@@ -47,7 +51,15 @@ fun Route.traceMetricsModule(
 
             val zMax = computeZScoreMax(dataSource, tenantId, resolvedRunId, metricKey)
             if (zMax >= zThreshold) {
-                maybeInsertDriftAlert(regenOpsStore, dataSource, tenantId, resolvedRunId, metricKey, zMax, zThreshold)
+                maybeInsertDriftAlert(
+                    regenOpsStore,
+                    dataSource,
+                    tenantId,
+                    resolvedRunId,
+                    metricKey,
+                    zMax,
+                    zThreshold,
+                )
             }
 
             call.respond(
@@ -86,7 +98,9 @@ private fun latestRunId(dataSource: DataSource, tenantId: String): String {
             """.trimIndent(),
         ).use { statement ->
             statement.setString(1, tenantId)
-            statement.executeQuery().use { rs -> if (rs.next()) rs.getString("run_id") else "" }
+                statement.executeQuery().use { rs ->
+                    if (rs.next()) rs.getString("run_id") else ""
+                }
         }
     }
 }
@@ -175,7 +189,10 @@ private fun maybeInsertDriftAlert(
                 statement.setString(1, tenantId)
                 statement.setString(2, runId)
                 statement.setString(3, metricKey)
-                statement.executeQuery().use { rs -> rs.next(); rs.getInt("total") > 0 }
+                statement.executeQuery().use { rs ->
+                    rs.next()
+                    rs.getInt("total") > 0
+                }
             }
         }
     if (exists) return

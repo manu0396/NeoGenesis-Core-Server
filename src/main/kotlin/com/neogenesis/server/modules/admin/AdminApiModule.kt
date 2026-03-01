@@ -20,6 +20,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.sql.Timestamp
@@ -37,13 +38,25 @@ fun Route.adminApiModule(
     val evidenceStore = JdbcRegenOpsStore(dataSource)
     authenticate("auth-jwt") {
         get("/admin/roles") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = false)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = false,
+                )
             audit(auditTrailService, context, "admin.roles.list")
             call.respond(AdminRolesResponse(roles = listOf("ADMIN", "OPERATOR", "VIEWER")))
         }
 
         get("/admin/users") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = false)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = false,
+                )
             audit(auditTrailService, context, "admin.users.list")
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
             val users = listUsers(dataSource, context.tenantId, limit)
@@ -51,7 +64,13 @@ fun Route.adminApiModule(
         }
 
         post("/admin/users") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = true)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = true,
+                )
             val request = call.receive<AdminUserCreateRequest>()
             val tenantId = normalizeTenant(request.tenantId, context)
             val username = request.username.trim()
@@ -70,13 +89,33 @@ fun Route.adminApiModule(
                     tenantId = tenantId,
                     isActive = true,
                 )
-            auditMutation(auditTrailService, context, "admin.users.create", "user", userId, mapOf("username" to username, "role" to normalizedRole))
-            evidenceMutation(evidenceStore, context, "admin.users.create", "user", userId, mapOf("username" to username, "role" to normalizedRole))
+            auditMutation(
+                auditTrailService,
+                context,
+                "admin.users.create",
+                "user",
+                userId,
+                mapOf("username" to username, "role" to normalizedRole),
+            )
+            evidenceMutation(
+                evidenceStore,
+                context,
+                "admin.users.create",
+                "user",
+                userId,
+                mapOf("username" to username, "role" to normalizedRole),
+            )
             call.respond(response)
         }
 
         put("/admin/users/{userId}/role") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = true)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = true,
+                )
             val userId = call.parameters["userId"]?.trim().orEmpty()
             if (userId.isBlank()) {
                 throw ApiException("invalid_request", "userId is required", HttpStatusCode.BadRequest)
@@ -85,12 +124,25 @@ fun Route.adminApiModule(
             val role = normalizeRoleForStorage(request.role.trim().uppercase())
             val updated = updateUserRole(dataSource, userId, role)
             auditMutation(auditTrailService, context, "admin.users.role.update", "user", userId, mapOf("role" to role))
-            evidenceMutation(evidenceStore, context, "admin.users.role.update", "user", userId, mapOf("role" to role))
+            evidenceMutation(
+                evidenceStore,
+                context,
+                "admin.users.role.update",
+                "user",
+                userId,
+                mapOf("role" to role),
+            )
             call.respond(updated)
         }
 
         get("/admin/tenants") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = false)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = false,
+                )
             audit(auditTrailService, context, "admin.tenants.list")
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
             val tenants = listTenants(dataSource, context, limit)
@@ -98,7 +150,13 @@ fun Route.adminApiModule(
         }
 
         post("/admin/tenants") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = true)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = true,
+                )
             val request = call.receive<AdminTenantCreateRequest>()
             val tenantId = request.tenantId.trim()
             val name = request.name?.trim()?.ifBlank { tenantId } ?: tenantId
@@ -107,12 +165,25 @@ fun Route.adminApiModule(
             }
             val created = createTenant(dataSource, tenantId, name)
             auditMutation(auditTrailService, context, "admin.tenants.create", "tenant", tenantId, mapOf("name" to name))
-            evidenceMutation(evidenceStore, context, "admin.tenants.create", "tenant", tenantId, mapOf("name" to name))
+            evidenceMutation(
+                evidenceStore,
+                context,
+                "admin.tenants.create",
+                "tenant",
+                tenantId,
+                mapOf("name" to name),
+            )
             call.respond(created)
         }
 
         get("/admin/sites") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = false)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = false,
+                )
             audit(auditTrailService, context, "admin.sites.list")
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
             val sites = listSites(dataSource, context.tenantId, limit)
@@ -120,7 +191,13 @@ fun Route.adminApiModule(
         }
 
         post("/admin/sites") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = true)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = true,
+                )
             val request = call.receive<AdminSiteCreateRequest>()
             val tenantId = normalizeTenant(request.tenantId, context)
             val siteId = request.siteId.trim()
@@ -129,13 +206,33 @@ fun Route.adminApiModule(
                 throw ApiException("invalid_request", "siteId and name are required", HttpStatusCode.BadRequest)
             }
             val created = createSite(dataSource, tenantId, siteId, name)
-            auditMutation(auditTrailService, context, "admin.sites.create", "site", siteId, mapOf("tenantId" to tenantId, "name" to name))
-            evidenceMutation(evidenceStore, context, "admin.sites.create", "site", siteId, mapOf("tenantId" to tenantId, "name" to name))
+            auditMutation(
+                auditTrailService,
+                context,
+                "admin.sites.create",
+                "site",
+                siteId,
+                mapOf("tenantId" to tenantId, "name" to name),
+            )
+            evidenceMutation(
+                evidenceStore,
+                context,
+                "admin.sites.create",
+                "site",
+                siteId,
+                mapOf("tenantId" to tenantId, "name" to name),
+            )
             call.respond(created)
         }
 
         get("/admin/gateways") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = false)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = false,
+                )
             audit(auditTrailService, context, "admin.gateways.list")
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
             val gateways = listGatewayInventory(dataSource, context.tenantId, limit)
@@ -143,14 +240,26 @@ fun Route.adminApiModule(
         }
 
         get("/admin/feature-flags") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = false)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = false,
+                )
             audit(auditTrailService, context, "admin.featureFlags.list")
             val flags = listFeatureFlags(dataSource, context.tenantId)
             call.respond(AdminFeatureFlagsResponse(flags = flags))
         }
 
         put("/admin/feature-flags") {
-            val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = true)
+            val context =
+                requireAdminContext(
+                    call.principal(),
+                    call.requireTenantId(),
+                    call.requireCorrelationId(),
+                    requireAdmin = true,
+                )
             val request = call.receive<AdminFeatureFlagUpsertRequest>()
             val tenantId = normalizeTenant(request.tenantId, context)
             val key = request.key.trim()
@@ -158,14 +267,34 @@ fun Route.adminApiModule(
                 throw ApiException("invalid_request", "key is required", HttpStatusCode.BadRequest)
             }
             val updated = upsertFeatureFlag(dataSource, tenantId, key, request.enabled, context.actorId)
-            auditMutation(auditTrailService, context, "admin.featureFlags.upsert", "feature_flag", key, mapOf("tenantId" to tenantId, "enabled" to request.enabled.toString()))
-            evidenceMutation(evidenceStore, context, "admin.featureFlags.upsert", "feature_flag", key, mapOf("tenantId" to tenantId, "enabled" to request.enabled.toString()))
+            auditMutation(
+                auditTrailService,
+                context,
+                "admin.featureFlags.upsert",
+                "feature_flag",
+                key,
+                mapOf("tenantId" to tenantId, "enabled" to request.enabled.toString()),
+            )
+            evidenceMutation(
+                evidenceStore,
+                context,
+                "admin.featureFlags.upsert",
+                "feature_flag",
+                key,
+                mapOf("tenantId" to tenantId, "enabled" to request.enabled.toString()),
+            )
             call.respond(updated)
         }
 
         if (complianceEnabled) {
             post("/admin/compliance/protocols/{protocolId}/publish-approvals") {
-                val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = true)
+                val context =
+                    requireAdminContext(
+                        call.principal(),
+                        call.requireTenantId(),
+                        call.requireCorrelationId(),
+                        requireAdmin = true,
+                    )
                 val protocolId = call.parameters["protocolId"]?.trim().orEmpty()
                 if (protocolId.isBlank()) {
                     throw ApiException("invalid_request", "protocolId is required", HttpStatusCode.BadRequest)
@@ -190,7 +319,13 @@ fun Route.adminApiModule(
             }
 
             post("/admin/compliance/publish-approvals/{approvalId}/approve") {
-                val context = requireAdminContext(call.principal(), call.requireTenantId(), call.requireCorrelationId(), requireAdmin = true)
+                val context =
+                    requireAdminContext(
+                        call.principal(),
+                        call.requireTenantId(),
+                        call.requireCorrelationId(),
+                        requireAdmin = true,
+                    )
                 val approvalId = call.parameters["approvalId"]?.trim().orEmpty()
                 if (approvalId.isBlank()) {
                     throw ApiException("invalid_request", "approvalId is required", HttpStatusCode.BadRequest)
@@ -286,10 +421,11 @@ private fun auditMutation(
             outcome = "success",
             requirementIds = listOf("REQ-ISO-006"),
             details =
-                details + mapOf(
-                    "tenantId" to context.tenantId,
-                    "correlationId" to context.correlationId,
-                ),
+                details +
+                    mapOf(
+                        "tenantId" to context.tenantId,
+                        "correlationId" to context.correlationId,
+                    ),
         ),
     )
 }
@@ -315,7 +451,7 @@ private fun evidenceMutation(
             actorId = context.actorId,
             resourceType = resourceType,
             resourceId = resourceId,
-            payloadJson = Json.encodeToString(payload),
+            payloadJson = Json.encodeToString(JsonObject.serializer(), payload),
             createdAtMs = Instant.now().toEpochMilli(),
         ),
     )

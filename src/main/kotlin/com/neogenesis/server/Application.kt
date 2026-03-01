@@ -57,10 +57,10 @@ import com.neogenesis.server.modules.BruteForceLimiter
 import com.neogenesis.server.modules.ErrorResponse
 import com.neogenesis.server.modules.InMemoryMetrics
 import com.neogenesis.server.modules.PasswordService
+import com.neogenesis.server.modules.admin.adminApiModule
+import com.neogenesis.server.modules.admin.adminWebModule
 import com.neogenesis.server.modules.auditModule
 import com.neogenesis.server.modules.authModule
-import com.neogenesis.server.modules.admin.adminWebModule
-import com.neogenesis.server.modules.admin.adminApiModule
 import com.neogenesis.server.modules.billingModule
 import com.neogenesis.server.modules.benchmark.benchmarkModule
 import com.neogenesis.server.modules.bioinkModule
@@ -69,9 +69,9 @@ import com.neogenesis.server.modules.commercial.CommercialService
 import com.neogenesis.server.modules.commercial.commercialModule
 import com.neogenesis.server.modules.connectors.connectorCertificationModule
 import com.neogenesis.server.modules.demo.simulatorModule
-import com.neogenesis.server.modules.evidence.evidencePackModule
-import com.neogenesis.server.modules.evidence.auditBundleModule
 import com.neogenesis.server.modules.devicesModule
+import com.neogenesis.server.modules.evidence.auditBundleModule
+import com.neogenesis.server.modules.evidence.evidencePackModule
 import com.neogenesis.server.modules.healthModule
 import com.neogenesis.server.modules.jobsModule
 import com.neogenesis.server.modules.shouldBootstrapAdmin

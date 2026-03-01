@@ -157,26 +157,26 @@ object AuditBundleBuilder {
                 """{"path":"${it.path}","fileHash":"${it.fileHash}","previousHash":"${it.previousHash}","chainHash":"${it.chainHash}"}"""
             }
         return """
-            {
-              "entries": [$items],
-              "lastHash": "$lastHash"
-            }
-        """.trimIndent()
+            |{
+            |  "entries": [$items],
+            |  "lastHash": "$lastHash"
+            |}
+        """.trimMargin()
     }
 
     private fun AuditBundleManifest.toJson(): String {
         val fileEntries =
             files.joinToString(",") { """{"path":"${it.path}","sha256":"${it.sha256}"}""" }
         return """
-            {
-              "jobId": "$jobId",
-              "tenantId": "$tenantId",
-              "generatedAt": "$generatedAt",
-              "serverVersion": "$serverVersion",
-              "files": [$fileEntries],
-              "bundleHash": "$bundleHash",
-              "hashAlgorithm": "$hashAlgorithm"
-            }
-        """.trimIndent()
+            |{
+            |  "jobId": "$jobId",
+            |  "tenantId": "$tenantId",
+            |  "generatedAt": "$generatedAt",
+            |  "serverVersion": "$serverVersion",
+            |  "files": [$fileEntries],
+            |  "bundleHash": "$bundleHash",
+            |  "hashAlgorithm": "$hashAlgorithm"
+            |}
+        """.trimMargin()
     }
 }

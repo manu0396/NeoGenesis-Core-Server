@@ -1,8 +1,8 @@
 package com.neogenesis.server.modules.evidence
 
 import com.neogenesis.server.application.AuditTrailService
-import com.neogenesis.server.domain.model.AuditEvent
 import com.neogenesis.server.application.regenops.RegenOpsStore
+import com.neogenesis.server.domain.model.AuditEvent
 import com.neogenesis.server.infrastructure.persistence.AuditLogRepository
 import com.neogenesis.server.infrastructure.persistence.CanonicalRole
 import com.neogenesis.server.infrastructure.persistence.JobRepository
@@ -346,11 +346,39 @@ private object SimplePdfBuilder {
         val content = buildContent(lines)
         val contentBytes = content.toByteArray(Charsets.US_ASCII)
         val objects = mutableListOf<String>()
-        objects += "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
-        objects += "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
-        objects += "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n"
-        objects += "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
-        objects += "5 0 obj\n<< /Length ${contentBytes.size} >>\nstream\n$content\nendstream\nendobj\n"
+        objects +=
+            """
+            1 0 obj
+            << /Type /Catalog /Pages 2 0 R >>
+            endobj
+            """.trimIndent() + "\n"
+        objects +=
+            """
+            2 0 obj
+            << /Type /Pages /Kids [3 0 R] /Count 1 >>
+            endobj
+            """.trimIndent() + "\n"
+        objects +=
+            """
+            3 0 obj
+            << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+            endobj
+            """.trimIndent() + "\n"
+        objects +=
+            """
+            4 0 obj
+            << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+            endobj
+            """.trimIndent() + "\n"
+        objects +=
+            """
+            5 0 obj
+            << /Length ${contentBytes.size} >>
+            stream
+            $content
+            endstream
+            endobj
+            """.trimIndent() + "\n"
 
         val header = "%PDF-1.4\n"
         val offsets = mutableListOf<Int>()
@@ -387,7 +415,7 @@ private object SimplePdfBuilder {
             if (index > 0) {
                 builder.append("0 -16 Td\n")
             }
-            builder.append("(${line}) Tj\n")
+            builder.append("($line) Tj\n")
         }
         builder.append("ET\n")
         return builder.toString()

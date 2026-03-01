@@ -14,21 +14,29 @@ import java.sql.Timestamp
 import java.time.Instant
 import javax.sql.DataSource
 
-fun Route.benchmarkModule(
-    dataSource: DataSource,
-) {
+fun Route.benchmarkModule(dataSource: DataSource) {
     authenticate("auth-jwt") {
         get("/benchmark/opt-in") {
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR, CanonicalRole.AUDITOR)
             val tenantId = call.requireTenantId()
-            call.respond(BenchmarkOptInResponse(tenantId = tenantId, optedIn = readOptIn(dataSource, tenantId)))
+            call.respond(
+                BenchmarkOptInResponse(
+                    tenantId = tenantId,
+                    optedIn = readOptIn(dataSource, tenantId),
+                ),
+            )
         }
 
         put("/benchmark/opt-in") {
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR)
             val tenantId = call.requireTenantId()
-            val enabled = call.request.queryParameters["enabled"]?.toBooleanStrictOrNull()
-                ?: throw ApiException("invalid_request", "enabled query param is required", HttpStatusCode.BadRequest)
+            val enabled =
+                call.request.queryParameters["enabled"]?.toBooleanStrictOrNull()
+                    ?: throw ApiException(
+                        "invalid_request",
+                        "enabled query param is required",
+                        HttpStatusCode.BadRequest,
+                    )
             upsertOptIn(dataSource, tenantId, enabled)
             call.respond(BenchmarkOptInResponse(tenantId = tenantId, optedIn = enabled))
         }
@@ -37,7 +45,11 @@ fun Route.benchmarkModule(
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR, CanonicalRole.AUDITOR)
             val tenantId = call.requireTenantId()
             if (!readOptIn(dataSource, tenantId)) {
-                throw ApiException("not_opted_in", "tenant has not opted into benchmark aggregation", HttpStatusCode.Forbidden)
+                throw ApiException(
+                    "not_opted_in",
+                    "tenant has not opted into benchmark aggregation",
+                    HttpStatusCode.Forbidden,
+                )
             }
             val protocolType = call.request.queryParameters["protocolType"]?.trim()
             val instrumentType = call.request.queryParameters["instrumentType"]?.trim()

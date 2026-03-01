@@ -142,7 +142,7 @@ private fun validateUnsafe(node: ProtocolNode): String? {
 }
 
 private fun JsonElement.asDouble(): Double? {
-    return (this as? JsonPrimitive)?.doubleOrNull
+    return (this as? JsonPrimitive)?.content?.toDoubleOrNull()
 }
 
 private fun detectCycle(graph: ProtocolGraph): Boolean {
