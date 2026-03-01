@@ -32,7 +32,8 @@ hs_err_pid*
 .Trashes
 ehthumbs.db
 Thumbs.db
-
+codex.txt
+time.txt
 # 5. Configuraciones Locales y Secretos
 local.properties
 *.jks
