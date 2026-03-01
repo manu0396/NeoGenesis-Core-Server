@@ -73,9 +73,15 @@ class PrintSessionService(
         return updateStatus(tenantId, sessionId, PrintSessionStatus.ABORTED, actor, "print.session.abort")
     }
 
-    fun findActiveByPrinterId(tenantId: String, printerId: String): PrintSession? = printSessionStore.findActiveByPrinterId(tenantId, printerId)
+    fun findActiveByPrinterId(
+        tenantId: String,
+        printerId: String,
+    ): PrintSession? = printSessionStore.findActiveByPrinterId(tenantId, printerId)
 
-    fun findActive(tenantId: String, limit: Int = 100): List<PrintSession> = printSessionStore.findActive(tenantId, limit)
+    fun findActive(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<PrintSession> = printSessionStore.findActive(tenantId, limit)
 
     private fun updateStatus(
         tenantId: String,

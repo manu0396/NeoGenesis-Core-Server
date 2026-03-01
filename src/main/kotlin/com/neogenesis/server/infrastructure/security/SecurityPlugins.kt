@@ -112,16 +112,18 @@ fun Application.configureHttpProxyMutualTlsValidation(
 }
 
 fun Application.configureTenantIsolation() {
-    install(createApplicationPlugin("TenantIsolation") {
-        onCall { call ->
-            val principal = call.principal<NeoGenesisPrincipal>()
-            if (principal != null) {
-                val tenantId = principal.tenantId ?: "default"
-                TenantContext.set(tenantId)
-                org.slf4j.MDC.put("tenantId", tenantId)
+    install(
+        createApplicationPlugin("TenantIsolation") {
+            onCall { call ->
+                val principal = call.principal<NeoGenesisPrincipal>()
+                if (principal != null) {
+                    val tenantId = principal.tenantId ?: "default"
+                    TenantContext.set(tenantId)
+                    org.slf4j.MDC.put("tenantId", tenantId)
+                }
             }
-        }
-    })
+        },
+    )
 }
 
 fun Application.configureRateLimiting(appConfig: AppConfig) {
@@ -165,18 +167,19 @@ private val AbacAuthorizationPlugin =
 
         on(AuthenticationChecked) { call ->
             val principal = call.principal<NeoGenesisPrincipal>() ?: return@on
-            
-            val context = AbacContext(
-                principal = principal,
-                action = action,
-                resourceType = resourceType,
-                resourceId = getResourceId(call),
-                attributes = getAttributes(call) + mapOf("tenant_id" to call.tenantId())
-            )
-            
+
+            val context =
+                AbacContext(
+                    principal = principal,
+                    action = action,
+                    resourceType = resourceType,
+                    resourceId = getResourceId(call),
+                    attributes = getAttributes(call) + mapOf("tenant_id" to call.tenantId()),
+                )
+
             val decision = policyEngine.decide(context)
             metricsService.recordAbacDecision(action, decision.name)
-            
+
             if (decision == AbacDecision.DENY) {
                 throw SecurityPluginException(
                     status = HttpStatusCode.Forbidden,

@@ -6,11 +6,17 @@ import com.neogenesis.server.domain.model.TelemetryState
 import java.util.UUID
 
 interface TelemetrySafetyPolicy {
-    fun decide(tenantId: String, telemetry: TelemetryState): ControlCommand
+    fun decide(
+        tenantId: String,
+        telemetry: TelemetryState,
+    ): ControlCommand
 }
 
 class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
-    override fun decide(tenantId: String, telemetry: TelemetryState): ControlCommand {
+    override fun decide(
+        tenantId: String,
+        telemetry: TelemetryState,
+    ): ControlCommand {
         if (
             telemetry.isCriticalViability() ||
             telemetry.isCriticalTemperature() ||

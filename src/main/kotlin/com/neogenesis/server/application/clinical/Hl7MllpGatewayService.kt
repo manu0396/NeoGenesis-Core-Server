@@ -42,7 +42,10 @@ class Hl7MllpGatewayService(
         }
     }
 
-    fun onInboundMessage(tenantId: String, message: String): String {
+    fun onInboundMessage(
+        tenantId: String,
+        message: String,
+    ): String {
         return try {
             clinicalIntegrationService.ingestHl7(tenantId, message, "mllp-listener")
             metricsService.recordMllpInbound()

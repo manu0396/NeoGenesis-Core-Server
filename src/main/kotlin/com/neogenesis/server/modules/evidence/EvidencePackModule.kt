@@ -310,7 +310,7 @@ private fun buildEvidenceBundle(
         )
     val manifestJson = Json.encodeToString(manifest)
     files["manifest.json"] = manifestJson.toByteArray(Charsets.UTF_8)
-    
+
     // Sign the manifest
     val signature = hmacSha256(manifestJson.toByteArray(Charsets.UTF_8), "evidence-signing-key-placeholder".toByteArray(Charsets.UTF_8))
     files["manifest.sig"] = signature.toByteArray(Charsets.UTF_8)
@@ -329,7 +329,10 @@ private fun buildEvidenceBundle(
     return output.toByteArray()
 }
 
-private fun hmacSha256(data: ByteArray, key: ByteArray): String {
+private fun hmacSha256(
+    data: ByteArray,
+    key: ByteArray,
+): String {
     val mac = javax.crypto.Mac.getInstance("HmacSHA256")
     val secretKey = javax.crypto.spec.SecretKeySpec(key, "HmacSHA256")
     mac.init(secretKey)

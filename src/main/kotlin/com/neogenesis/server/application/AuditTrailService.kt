@@ -15,12 +15,18 @@ class AuditTrailService(
         metricsService.recordAuditEvent(event.action, event.outcome)
     }
 
-    fun recent(limit: Int = 200, tenantId: String? = null): List<AuditEvent> {
+    fun recent(
+        limit: Int = 200,
+        tenantId: String? = null,
+    ): List<AuditEvent> {
         val targetTenant = tenantId ?: TenantContext.get() ?: "default"
         return auditEventStore.recent(targetTenant, limit)
     }
 
-    fun verifyChain(limit: Int = 10_000, tenantId: String? = null): AuditChainVerification {
+    fun verifyChain(
+        limit: Int = 10_000,
+        tenantId: String? = null,
+    ): AuditChainVerification {
         val targetTenant = tenantId ?: TenantContext.get() ?: "default"
         return auditEventStore.verifyChain(targetTenant, limit)
     }

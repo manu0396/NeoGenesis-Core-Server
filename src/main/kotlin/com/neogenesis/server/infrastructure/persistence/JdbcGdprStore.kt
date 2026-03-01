@@ -112,7 +112,10 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
         }
     }
 
-    override fun recentErasures(tenantId: String, limit: Int): List<GdprErasureRecord> {
+    override fun recentErasures(
+        tenantId: String,
+        limit: Int,
+    ): List<GdprErasureRecord> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -155,7 +158,10 @@ class JdbcGdprStore(private val dataSource: DataSource) : GdprStore {
         }
     }
 
-    override fun anonymizeClinicalDocuments(tenantId: String, patientId: String): Int {
+    override fun anonymizeClinicalDocuments(
+        tenantId: String,
+        patientId: String,
+    ): Int {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """

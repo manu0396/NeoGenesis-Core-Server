@@ -39,7 +39,10 @@ class OperationalMetricsService(
             .increment()
     }
 
-    fun recordAbacDecision(action: String, decision: String) {
+    fun recordAbacDecision(
+        action: String,
+        decision: String,
+    ) {
         Counter.builder("neogenesis_abac_decisions_total")
             .description("Total attribute-based access control decisions")
             .tag("action", action)

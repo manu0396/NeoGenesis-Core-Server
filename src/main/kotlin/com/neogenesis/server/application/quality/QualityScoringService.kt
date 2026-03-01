@@ -31,17 +31,18 @@ class QualityScoringService {
         val sViability = exp(-viabilityDrift / 0.1f)
 
         val totalScore = (sTemp * 0.3f + sPressure * 0.3f + sViability * 0.4f)
-        
-        val metrics = mapOf(
-            "temp_drift" to tempDrift,
-            "pressure_drift" to pressureDrift,
-            "viability_drift" to viabilityDrift
-        )
+
+        val metrics =
+            mapOf(
+                "temp_drift" to tempDrift,
+                "pressure_drift" to pressureDrift,
+                "viability_drift" to viabilityDrift,
+            )
 
         return ReproducibilityScore(
             score = totalScore,
             metrics = metrics,
-            driftDetected = totalScore < 0.85f
+            driftDetected = totalScore < 0.85f,
         )
     }
 }
