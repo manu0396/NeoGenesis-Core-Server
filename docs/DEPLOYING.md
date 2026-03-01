@@ -36,6 +36,19 @@ Primary production artifact: **Shadow JAR** (`build/libs/*-all.jar`). Container 
 - Flyway migrations run at startup when `neogenesis.database.migrateOnStartup=true`.
 - For production, ensure migrations are executed as part of deployment or boot (recommended: boot).
 
+## Gateway mTLS Provisioning + Rotation
+- Issue per-gateway client certs signed by the server CA.
+- Configure gateway with `GATEWAY_CLIENT_CERT`, `GATEWAY_CLIENT_KEY`, `SERVER_CA_CERT`.
+- For rotation: deploy new cert/key, restart gateway (cert watcher will detect changes).
+
+## Multi-tenant + Correlation
+- All commercial pipeline endpoints require `tenant_id` and `correlation_id`.
+- HTTP correlation uses `X-Correlation-Id` or `X-Request-Id` headers.
+
+## Resumable Streaming
+- gRPC endpoints support `since_ms` and `since_seq` for resuming streams.
+- Use the latest acknowledged sequence for resume to avoid duplicates.
+
 ## Running (Shadow JAR)
 ```bash
 export ENV=production
