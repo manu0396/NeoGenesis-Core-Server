@@ -29,6 +29,10 @@ data class AppConfig(
         AdminWebConfig(
             enabled = false,
         ),
+    val adminApi: AdminApiConfig =
+        AdminApiConfig(
+            enabled = false,
+        ),
     val host: String = "0.0.0.0",
     val port: Int = 8080,
     val env: String = "development",
@@ -103,6 +107,10 @@ data class AppConfig(
     )
 
     data class AdminWebConfig(
+        val enabled: Boolean,
+    )
+
+    data class AdminApiConfig(
         val enabled: Boolean,
     )
 
@@ -743,6 +751,13 @@ data class AppConfig(
                         enabled =
                             env("ADMIN_WEB_MODE")?.equals("true", ignoreCase = true)
                                 ?: config.bool("neogenesis.admin.web.mode")
+                                ?: false,
+                    ),
+                adminApi =
+                    AdminApiConfig(
+                        enabled =
+                            env("ADMIN_API_MODE")?.equals("true", ignoreCase = true)
+                                ?: config.bool("neogenesis.admin.api.mode")
                                 ?: false,
                     ),
                 host = host,

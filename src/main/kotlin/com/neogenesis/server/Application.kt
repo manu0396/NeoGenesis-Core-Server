@@ -59,6 +59,7 @@ import com.neogenesis.server.modules.PasswordService
 import com.neogenesis.server.modules.auditModule
 import com.neogenesis.server.modules.authModule
 import com.neogenesis.server.modules.admin.adminWebModule
+import com.neogenesis.server.modules.admin.adminApiModule
 import com.neogenesis.server.modules.billingModule
 import com.neogenesis.server.modules.bioinkModule
 import com.neogenesis.server.modules.commercial.CommercialRepository
@@ -501,6 +502,12 @@ fun Application.module() {
         }
         if (appConfig.adminWeb.enabled) {
             adminWebModule(
+                auditTrailService = auditTrailService,
+            )
+        }
+        if (appConfig.adminApi.enabled) {
+            adminApiModule(
+                dataSource = dataSource,
                 auditTrailService = auditTrailService,
             )
         }
