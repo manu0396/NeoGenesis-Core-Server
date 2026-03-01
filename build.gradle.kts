@@ -1,5 +1,6 @@
 @file:Suppress("ktlint:standard:no-wildcard-imports")
 
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.cyclonedx.gradle.CycloneDxTask
 import java.io.File
 val ktorVersion = "3.0.3"
@@ -127,6 +128,10 @@ java {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.withType<ShadowJar>().configureEach {
+    isZip64 = true
 }
 
 tasks.register("traceabilityGate") {
