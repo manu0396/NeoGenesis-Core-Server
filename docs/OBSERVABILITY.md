@@ -16,6 +16,7 @@ Tracing / OTEL
 Logging
 - Server supports JSON logs when `LOG_FORMAT=json`.
 - Gateway logs are stdout; use systemd journald or a log shipper.
+- JSON logs include `correlationId` and `tenantId` when available.
 
 Correlation
 - Incoming requests accept `X-Correlation-Id` or `X-Request-Id`.
