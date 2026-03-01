@@ -14,8 +14,10 @@ import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import io.ktor.server.request.receive
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -34,6 +36,23 @@ fun Route.demoUiModule(
     regenOpsStore: RegenOpsStore,
 ) {
     authenticate("auth-jwt") {
+        get("/api/v1/regenops/protocols") {
+            call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR, CanonicalRole.AUDITOR)
+            val tenantId = call.requireTenantId()
+            call.requireCorrelationId()
+            val protocols = DemoProtocolStore.list(tenantId)
+            call.respond(ListProtocolsResponse(protocols = protocols))
+        }
+
+        post("/api/v1/regenops/protocols") {
+            call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR)
+            val tenantId = call.requireTenantId()
+            call.requireCorrelationId()
+            val request = call.receive<CreateProtocolRequest>()
+            val created = DemoProtocolStore.create(tenantId, request)
+            call.respond(created)
+        }
+
         get("/api/v1/metrics/reproducibility-score") {
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR, CanonicalRole.AUDITOR)
             val tenantId = call.requireTenantId()
@@ -178,6 +197,38 @@ data class CommercialOpportunityResponse(
 )
 
 @Serializable
+data class ListProtocolsResponse(
+    val protocols: List<ProtocolSummaryResponse> = emptyList(),
+)
+
+@Serializable
+data class ProtocolSummaryResponse(
+    val protocolId: String,
+    val title: String,
+    val summary: String,
+    val latestVersion: Int,
+    val resultSummary: String? = null,
+    val lastOutcome: String? = null,
+    val resultMetrics: Map<String, String> = emptyMap(),
+    val evidenceSummary: String? = null,
+    val lastRunTimeline: List<String> = emptyList(),
+)
+
+@Serializable
+data class CreateProtocolRequest(
+    val protocolId: String,
+    val title: String,
+    val summary: String,
+    val contentJson: String,
+    val author: String,
+    val resultSummary: String? = null,
+    val lastOutcome: String? = null,
+    val resultMetrics: Map<String, String> = emptyMap(),
+    val evidenceSummary: String? = null,
+    val lastRunTimeline: List<String> = emptyList(),
+)
+
+@Serializable
 private data class DemoRunReport(
     val tenantId: String,
     val runId: String,
@@ -276,6 +327,55 @@ private fun buildPipelineCsv(pipeline: Map<String, List<CommercialOpportunityRes
             ).joinToString(",")
         }
     return header + "\n" + rows
+}
+
+private object DemoProtocolStore {
+    private val protocolsByTenant = mutableMapOf<String, MutableList<ProtocolSummaryResponse>>()
+
+    fun list(tenantId: String): List<ProtocolSummaryResponse> {
+        val existing = protocolsByTenant.getOrPut(tenantId) {
+            mutableListOf(
+                ProtocolSummaryResponse(
+                    protocolId = "regenops-001",
+                    title = "RegenOps: Controlled Growth Run",
+                    summary = "Execute a controlled growth simulation with safety bounds and trace checkpoints.",
+                    latestVersion = 3,
+                    resultSummary = "Yield stability 98.7% with zero drift alerts across 3 checkpoints.",
+                    lastOutcome = "SUCCESS",
+                    resultMetrics = mapOf(
+                        "Yield" to "98.7%",
+                        "Stability" to "0.3% variance",
+                        "Cycle Time" to "42m",
+                    ),
+                    evidenceSummary = "Evidence bundle sealed with SHA-256 hashes; zero integrity anomalies.",
+                    lastRunTimeline = listOf(
+                        "00:00 Init safety envelope",
+                        "00:17 Checkpoint A verified",
+                        "00:29 Checkpoint B verified",
+                        "00:41 Completion & seal",
+                    ),
+                ),
+            )
+        }
+        return existing.toList()
+    }
+
+    fun create(tenantId: String, request: CreateProtocolRequest): ProtocolSummaryResponse {
+        val list = protocolsByTenant.getOrPut(tenantId) { mutableListOf() }
+        val created = ProtocolSummaryResponse(
+            protocolId = request.protocolId.trim(),
+            title = request.title.trim(),
+            summary = request.summary.trim(),
+            latestVersion = 1,
+            resultSummary = request.resultSummary,
+            lastOutcome = request.lastOutcome,
+            resultMetrics = request.resultMetrics,
+            evidenceSummary = request.evidenceSummary,
+            lastRunTimeline = request.lastRunTimeline,
+        )
+        list.add(0, created)
+        return created
+    }
 }
 
 private fun telemetryToCsv(telemetry: List<RegenTelemetryPoint>): String {
