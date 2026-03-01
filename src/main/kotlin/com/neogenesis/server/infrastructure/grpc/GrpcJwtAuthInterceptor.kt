@@ -1,11 +1,14 @@
 package com.neogenesis.server.infrastructure.grpc
 
 import com.auth0.jwt.JWTVerifier
+import io.grpc.Contexts
+import io.grpc.Grpc
 import io.grpc.Metadata
 import io.grpc.ServerCall
 import io.grpc.ServerCallHandler
 import io.grpc.ServerInterceptor
 import io.grpc.Status
+import java.security.cert.X509Certificate
 
 class GrpcJwtAuthInterceptor(
     private val verifier: JWTVerifier,
@@ -28,16 +31,19 @@ class GrpcJwtAuthInterceptor(
 
         return try {
             val decoded = verifier.verify(token)
+            val subject = decoded.subject ?: "grpc-client"
             val claim = decoded.getClaim("roles")
             val roles =
                 claim.asList(String::class.java)
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
+                    ?.map { it.lowercase() }
                     ?.toSet()
                     ?: claim.asString()
                         ?.split(',')
                         ?.map { it.trim() }
                         ?.filter { it.isNotBlank() }
+                        ?.map { it.lowercase() }
                         ?.toSet()
                         .orEmpty()
             val scopes =
@@ -45,16 +51,25 @@ class GrpcJwtAuthInterceptor(
                     ?.split(' ')
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
+                    ?.map { it.lowercase() }
                     ?.toSet()
                     .orEmpty()
             val authzGrants = roles + scopes
 
-            if (authzGrants.intersect(REQUIRED_ROLES).isEmpty()) {
+            if (authzGrants.intersect(REQUIRED_GRANTS).isEmpty()) {
                 call.close(Status.PERMISSION_DENIED.withDescription("Insufficient gRPC role"), Metadata())
                 return object : ServerCall.Listener<ReqT>() {}
             }
 
-            next.startCall(call, headers)
+            val principal =
+                GrpcPrincipal(
+                    subject = subject,
+                    grants = authzGrants,
+                    tenantId = decoded.getClaim("tenantId").asString(),
+                    mtlsCertificateSerial = resolvePeerCertificateSerial(call),
+                )
+            val context = io.grpc.Context.current().withValue(GrpcAuthContextKeys.principal, principal)
+            Contexts.interceptCall(context, call, headers, next)
         } catch (_: Exception) {
             call.close(Status.UNAUTHENTICATED.withDescription("Invalid bearer token"), Metadata())
             object : ServerCall.Listener<ReqT>() {}
@@ -62,8 +77,31 @@ class GrpcJwtAuthInterceptor(
     }
 
     companion object {
-        private val REQUIRED_ROLES = setOf("firmware", "controller")
+        private val REQUIRED_GRANTS =
+            setOf(
+                "firmware",
+                "controller",
+                "gateway",
+                "regenops_operator",
+                "regenops_auditor",
+                "admin",
+                "operator",
+                "auditor",
+                "integration",
+                "sre",
+                "quality_manager",
+            )
         private val AUTHORIZATION_HEADER: Metadata.Key<String> =
             Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER)
     }
+}
+
+private fun resolvePeerCertificateSerial(call: ServerCall<*, *>): String? {
+    val sslSession = call.attributes.get(Grpc.TRANSPORT_ATTR_SSL_SESSION) ?: return null
+    val certificate =
+        runCatching {
+            sslSession.peerCertificates.firstOrNull() as? X509Certificate
+        }.getOrNull()
+            ?: return null
+    return certificate.serialNumber.toString(16).lowercase()
 }

@@ -29,6 +29,7 @@ This server is designed to support:
 - Closed-loop telemetry evaluation and control-command emission
 - Advanced bio-simulation (`Ostwald-de Waele` + viability decay model)
 - Digital twin state updates and risk scoring
+- RegenOps gRPC APIs for protocol drafting/versioning, run control, gateway ingestion, and metrics/report export
 - Clinical ingestion gateway (FHIR, HL7 v2, DICOM metadata)
 - GDPR consent/erasure and retention controls
 - ISO 13485 traceability matrix + CI gate
@@ -76,6 +77,71 @@ Prerequisites:
 
 ```bash
 curl http://localhost:8080/health
+```
+
+## RegenOps Walking Skeleton (Local)
+
+Prerequisites:
+- Docker + Docker Compose
+- `grpcurl`
+
+1. Start DB + server:
+
+```bash
+docker compose up --build
+```
+
+2. Get JWT (bootstrap admin is enabled by default in `docker-compose.yml`):
+
+```powershell
+$token = (Invoke-RestMethod -Method Post -Uri http://localhost:8080/auth/login `
+  -ContentType 'application/json' `
+  -Body '{"username":"admin","password":"admin-password"}').accessToken
+```
+
+3. Create protocol draft:
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $token" \
+  -import-path src/main/proto -proto bioprint.proto \
+  -d '{"tenant_id":"tenant-a","protocol_id":"proto-1","title":"RegenOps MVP","content_json":"{\"steps\":[\"seed\",\"incubate\"]}","actor_id":"admin"}' \
+  localhost:50051 com.neogenesis.grpc.ProtocolService/CreateDraft
+```
+
+4. Publish protocol version:
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $token" \
+  -import-path src/main/proto -proto bioprint.proto \
+  -d '{"tenant_id":"tenant-a","protocol_id":"proto-1","actor_id":"admin","changelog":"initial release"}' \
+  localhost:50051 com.neogenesis.grpc.ProtocolService/PublishVersion
+```
+
+5. Start run:
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $token" \
+  -import-path src/main/proto -proto bioprint.proto \
+  -d '{"tenant_id":"tenant-a","protocol_id":"proto-1","protocol_version":1,"run_id":"run-1","gateway_id":"gw-1","actor_id":"admin"}' \
+  localhost:50051 com.neogenesis.grpc.RunService/StartRun
+```
+
+6. Stream run events:
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $token" \
+  -import-path src/main/proto -proto bioprint.proto \
+  -d '{"tenant_id":"tenant-a","run_id":"run-1","since_ms":0,"limit":100}' \
+  localhost:50051 com.neogenesis.grpc.RunService/StreamRunEvents
+```
+
+7. Export run report:
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $token" \
+  -import-path src/main/proto -proto bioprint.proto \
+  -d '{"tenant_id":"tenant-a","run_id":"run-1"}' \
+  localhost:50051 com.neogenesis.grpc.MetricsService/ExportRunReport
 ```
 
 ## Production Baseline
