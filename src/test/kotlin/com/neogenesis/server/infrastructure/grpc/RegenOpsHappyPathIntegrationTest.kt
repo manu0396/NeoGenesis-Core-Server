@@ -5,10 +5,10 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.neogenesis.grpc.CreateDraftRequest
 import com.neogenesis.grpc.ExportRunReportRequest
 import com.neogenesis.grpc.GatewayRunEvent
-import com.neogenesis.grpc.GatewayTelemetry
-import com.neogenesis.grpc.GetRunRequest
-import com.neogenesis.grpc.GetReproducibilityScoreRequest
 import com.neogenesis.grpc.GatewayServiceGrpcKt
+import com.neogenesis.grpc.GatewayTelemetry
+import com.neogenesis.grpc.GetReproducibilityScoreRequest
+import com.neogenesis.grpc.GetRunRequest
 import com.neogenesis.grpc.MetricsServiceGrpcKt
 import com.neogenesis.grpc.ProtocolServiceGrpcKt
 import com.neogenesis.grpc.PublishVersionRequest
