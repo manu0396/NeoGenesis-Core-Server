@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package com.neogenesis.platform.proto.v1;
+
+import "platform.proto";
+
+option java_multiple_files = true;
+option java_package = "com.neogenesis.platform.proto.v1";
+
+service ProtocolService {
+  rpc ListProtocols(ListProtocolsRequest) returns (ListProtocolsResponse);
+  rpc PublishVersion(PublishVersionRequest) returns (ProtocolVersion);
+}
+
+service RunService {
+  rpc StartRun(StartRunRequest) returns (RunRef);
+  rpc PauseRun(PauseRunRequest) returns (RunRef);
+  rpc AbortRun(AbortRunRequest) returns (RunRef);
+  rpc GetRun(GetRunRequest) returns (RunRef);
+  rpc StreamRunEvents(GetRunRequest) returns (stream RunEvent);
+  rpc StreamTelemetry(GetRunRequest) returns (stream .neogenesis.platform.v1.TelemetryFrame);
+}
+
+message ListProtocolsRequest {}
+
+message ListProtocolsResponse {
+  repeated ProtocolSummary protocols = 1;
+}
+
+message ProtocolSummary {
+  string protocol_id = 1;
+  string name = 2;
+  string summary = 3;
+  ProtocolVersion latest_version = 4;
+}
+
+message ProtocolVersion {
+  string version_id = 1;
+  string protocol_id = 2;
+  string version = 3;
+  string created_at = 4;
+  string payload = 5;
+  bool published = 6;
+}
+
+message PublishVersionRequest {
+  string protocol_id = 1;
+  string version_id = 2;
+}
+
+message StartRunRequest {
+  string protocol_id = 1;
+  string version_id = 2;
+}
+
+message PauseRunRequest {
+  string run_id = 1;
+}
+
+message AbortRunRequest {
+  string run_id = 1;
+}
+
+message GetRunRequest {
+  string run_id = 1;
+}
+
+message RunRef {
+  string run_id = 1;
+  string status = 2;
+}
+
+message RunEvent {
+  string run_id = 1;
+  string event_type = 2;
+  string message = 3;
+  string created_at = 4;
+}

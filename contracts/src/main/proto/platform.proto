@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package neogenesis.platform.v1;
+
+option java_multiple_files = true;
+option java_package = "com.neogenesis.platform.proto.v1";
+
+message TelemetryRequest {
+  string job_id = 1;
+  string device_id = 2;
+  int32 rate_ms = 3;
+  string filter_json = 4;
+}
+
+message TelemetryFrame {
+  string job_id = 1;
+  string device_id = 2;
+  int64 timestamp_ms = 3;
+  double pressure_kpa = 4;
+  double displacement_um = 5;
+  double flow_rate_ul_s = 6;
+  double temperature_c = 7;
+  double viscosity_pas = 8;
+  double pid_p = 9;
+  double pid_i = 10;
+  double pid_d = 11;
+  int32 mpc_horizon_ms = 12;
+  double mpc_predicted_pressure_kpa = 13;
+}
+
+message DeviceControlCommand {
+  string command_id = 1;
+  string device_id = 2;
+  string command = 3;
+  string parameters_json = 4;
+}
+
+message DeviceControlAck {
+  string command_id = 1;
+  string device_id = 2;
+  bool accepted = 3;
+  string message = 4;
+}
+
+message PrintJobEvent {
+  string job_id = 1;
+  string event_type = 2;
+  string payload_json = 3;
+  int64 timestamp_ms = 4;
+}
+
+message EvidenceEvent {
+  string job_id = 1;
+  string event_type = 2;
+  string payload_hash = 3;
+  string hash = 4;
+  string prev_hash = 5;
+  int64 timestamp_ms = 6;
+}
+
+message PairingChallenge {
+  string pairing_id = 1;
+  string device_id = 2;
+  string challenge = 3;
+}
+
+message PairingResponse {
+  string pairing_id = 1;
+  string device_id = 2;
+  string response = 3;
+}
+
+message PairingResult {
+  string pairing_id = 1;
+  string device_id = 2;
+  bool verified = 3;
+  string message = 4;
+}
+
+service TelemetryStreamService {
+  rpc StreamTelemetry(stream TelemetryRequest) returns (stream TelemetryFrame);
+}
+
+service DeviceControlService {
+  rpc Control(stream DeviceControlCommand) returns (stream DeviceControlAck);
+}
+
+service PrintJobEventService {
+  rpc StreamEvents(stream PrintJobEvent) returns (stream PrintJobEvent);
+}
+
+service PairingService {
+  rpc StartPairing(PairingChallenge) returns (PairingResult);
+  rpc CompletePairing(PairingResponse) returns (PairingResult);
+}
