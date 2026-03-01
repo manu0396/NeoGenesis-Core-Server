@@ -1,20 +1,20 @@
 ﻿package com.neogenesis.gateway
 
 import com.neogenesis.grpc.GatewayAck
-import com.neogenesis.grpc.GatewayConfig
 import com.neogenesis.grpc.GatewayServiceGrpcKt
 import com.neogenesis.grpc.GatewayTelemetry
 import com.neogenesis.grpc.GatewayRunEvent
+import com.neogenesis.grpc.GatewayConfig as GatewayConfigProto
 import com.neogenesis.grpc.FetchConfigRequest
 import com.neogenesis.grpc.HeartbeatRequest
 import com.neogenesis.grpc.PushRunEventsRequest
 import com.neogenesis.grpc.PushTelemetryRequest
 import com.neogenesis.grpc.RegisterGatewayRequest
-import io.grpc.ManagedChannel
+import io.grpc.Channel
 import kotlinx.coroutines.withTimeout
 
 class GatewayClient(
-    private val channel: ManagedChannel,
+    private val channel: Channel,
     private val config: GatewayConfig,
 ) {
     private val stub = GatewayServiceGrpcKt.GatewayServiceCoroutineStub(channel)
@@ -64,7 +64,7 @@ class GatewayClient(
         return withTimeout(config.requestTimeoutMs) { stub.pushRunEvents(request) }
     }
 
-    suspend fun fetchConfig(): GatewayConfig {
+    suspend fun fetchConfig(): GatewayConfigProto {
         val request =
             FetchConfigRequest.newBuilder()
                 .setTenantId(config.tenantId)
