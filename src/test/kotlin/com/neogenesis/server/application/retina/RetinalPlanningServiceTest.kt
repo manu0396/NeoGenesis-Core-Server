@@ -44,14 +44,20 @@ class RetinalPlanningServiceTest {
             data[plan.planId] = plan
         }
 
-        override fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan? =
-            data[planId]?.takeIf { it.tenantId == tenantId }
+        override fun findByPlanId(
+            tenantId: String,
+            planId: String,
+        ): RetinalPrintPlan? = data[planId]?.takeIf { it.tenantId == tenantId }
 
-        override fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan? =
-            data.values.filter { it.tenantId == tenantId && it.patientId == patientId }.maxByOrNull { it.createdAtMs }
+        override fun findLatestByPatientId(
+            tenantId: String,
+            patientId: String,
+        ): RetinalPrintPlan? = data.values.filter { it.tenantId == tenantId && it.patientId == patientId }.maxByOrNull { it.createdAtMs }
 
-        override fun findRecent(tenantId: String, limit: Int): List<RetinalPrintPlan> =
-            data.values.filter { it.tenantId == tenantId }.sortedByDescending { it.createdAtMs }.take(limit)
+        override fun findRecent(
+            tenantId: String,
+            limit: Int,
+        ): List<RetinalPrintPlan> = data.values.filter { it.tenantId == tenantId }.sortedByDescending { it.createdAtMs }.take(limit)
     }
 
     private class FakeAuditStore : AuditEventStore {
@@ -61,10 +67,15 @@ class RetinalPlanningServiceTest {
             events += event
         }
 
-        override fun recent(tenantId: String, limit: Int): List<AuditEvent> =
-            events.filter { it.tenantId == tenantId }.takeLast(limit)
+        override fun recent(
+            tenantId: String,
+            limit: Int,
+        ): List<AuditEvent> = events.filter { it.tenantId == tenantId }.takeLast(limit)
 
-        override fun verifyChain(tenantId: String, limit: Int): AuditChainVerification {
+        override fun verifyChain(
+            tenantId: String,
+            limit: Int,
+        ): AuditChainVerification {
             return AuditChainVerification(
                 valid = true,
                 checkedEvents = events.filter { it.tenantId == tenantId }.size.coerceAtMost(limit),

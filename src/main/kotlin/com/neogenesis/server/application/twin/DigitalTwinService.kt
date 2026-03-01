@@ -95,7 +95,10 @@ class DigitalTwinService(
         return state
     }
 
-    fun findByPrinterId(tenantId: String, printerId: String): DigitalTwinState? = digitalTwinStore.findByPrinterId(tenantId, printerId)
+    fun findByPrinterId(
+        tenantId: String,
+        printerId: String,
+    ): DigitalTwinState? = digitalTwinStore.findByPrinterId(tenantId, printerId)
 
     fun findAll(tenantId: String): List<DigitalTwinState> = digitalTwinStore.findAll(tenantId).sortedByDescending { it.updatedAtMs }
 }

@@ -15,6 +15,7 @@ import com.neogenesis.server.application.error.BadRequestException
 import com.neogenesis.server.application.error.DependencyUnavailableException
 import com.neogenesis.server.application.port.ControlCommandStore
 import com.neogenesis.server.application.port.TelemetryEventStore
+import com.neogenesis.server.application.quality.QualityScoringService
 import com.neogenesis.server.application.resilience.RequestIdempotencyService
 import com.neogenesis.server.application.retina.RetinalPlanningService
 import com.neogenesis.server.application.serverless.ServerlessDispatchService
@@ -54,8 +55,6 @@ import java.time.Instant
 import java.util.Base64
 import javax.sql.DataSource
 
-import com.neogenesis.server.application.quality.QualityScoringService
-
 fun Route.qualityRoutes(
     qualityScoringService: QualityScoringService,
     telemetryEventStore: TelemetryEventStore,
@@ -64,12 +63,20 @@ fun Route.qualityRoutes(
     secured(requiredRoles = setOf("researcher", "quality_manager"), metricsService = metricsService) {
         get("/quality/reproducibility/{jobId}") {
             val jobId = call.parameters["jobId"] ?: throw BadRequestException("job_required", "jobId is required")
-            val baselineJobId = call.request.queryParameters["baselineJobId"] ?: throw BadRequestException("baseline_required", "baselineJobId is required")
-            
+            val baselineJobId =
+                call.request.queryParameters["baselineJobId"] ?: throw BadRequestException(
+                    "baseline_required",
+                    "baselineJobId is required",
+                )
+
             val tenantId = call.tenantId()
             val actual = telemetryEventStore.recent(tenantId, 1000).filter { it.telemetry.printJobId == jobId }.map { it.telemetry }
-            val expected = telemetryEventStore.recent(tenantId, 1000).filter { it.telemetry.printJobId == baselineJobId }.map { it.telemetry }
-            
+            val expected =
+                telemetryEventStore.recent(
+                    tenantId,
+                    1000,
+                ).filter { it.telemetry.printJobId == baselineJobId }.map { it.telemetry }
+
             val score = qualityScoringService.calculateScore(actual, expected)
             call.respond(score)
         }
@@ -155,16 +162,15 @@ fun Route.telemetryRoutes(
     }
 
     rateLimit(RateLimitName("tenant-write")) {
-            secured(requiredRoles = setOf("controller"), metricsService = metricsService) {
-                withAbac(
-                    action = "telemetry.evaluate",
-                    resourceType = "printer",
-                    abacPolicyEngine = abacPolicyEngine,
-                    metricsService = metricsService,
-                    getResourceId = { it.parameters["printerId"] ?: "unknown" },
-                    getAttributes = { mapOf("site_id" to (it.request.headers["x-site-id"] ?: "default")) }
-                ) {
-        
+        secured(requiredRoles = setOf("controller"), metricsService = metricsService) {
+            withAbac(
+                action = "telemetry.evaluate",
+                resourceType = "printer",
+                abacPolicyEngine = abacPolicyEngine,
+                metricsService = metricsService,
+                getResourceId = { it.parameters["printerId"] ?: "unknown" },
+                getAttributes = { mapOf("site_id" to (it.request.headers["x-site-id"] ?: "default")) },
+            ) {
                 post("/telemetry/evaluate") {
                     val request = call.receive<TelemetryEvaluateRequest>()
 
@@ -318,7 +324,7 @@ fun Route.clinicalRoutes(
             resourceType = "pacs",
             abacPolicyEngine = abacPolicyEngine,
             metricsService = metricsService,
-            getResourceId = { "latest" }
+            getResourceId = { "latest" },
         ) {
             post("/clinical/pacs/import-latest") {
                 val request = call.receive<PacsImportLatestRequest>()
@@ -703,7 +709,7 @@ fun Route.regulatoryRoutes(
             resourceType = "capa",
             abacPolicyEngine = abacPolicyEngine,
             metricsService = metricsService,
-            getResourceId = { null }
+            getResourceId = { null },
         ) {
             post("/regulatory/capa") {
                 val request = call.receive<CreateCapaRequest>()

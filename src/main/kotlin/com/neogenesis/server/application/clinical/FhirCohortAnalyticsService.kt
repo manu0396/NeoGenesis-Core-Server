@@ -11,7 +11,10 @@ class FhirCohortAnalyticsService(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun getCohortDemographics(tenantId: String, limit: Int = 2_000): Map<String, Int> {
+    fun getCohortDemographics(
+        tenantId: String,
+        limit: Int = 2_000,
+    ): Map<String, Int> {
         val stats = linkedMapOf<String, Int>()
         documentStore.recent(tenantId, limit)
             .asSequence()
@@ -29,7 +32,10 @@ class FhirCohortAnalyticsService(
         return stats
     }
 
-    fun getViabilityMetricsByTissue(tenantId: String, limit: Int = 2_000): Map<String, Double> {
+    fun getViabilityMetricsByTissue(
+        tenantId: String,
+        limit: Int = 2_000,
+    ): Map<String, Double> {
         val grouped = mutableMapOf<String, MutableList<Double>>()
         documentStore.recent(tenantId, limit).forEach { doc ->
             val tissue = doc.metadata["tissueType"]?.ifBlank { null } ?: "retina"

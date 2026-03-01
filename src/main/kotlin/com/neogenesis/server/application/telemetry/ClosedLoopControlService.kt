@@ -14,7 +14,10 @@ class ClosedLoopControlService(
     private val printSessionStore: PrintSessionStore,
     private val retinalPlanStore: RetinalPlanStore,
 ) {
-    fun decide(tenantId: String, telemetry: TelemetryState): ControlCommand {
+    fun decide(
+        tenantId: String,
+        telemetry: TelemetryState,
+    ): ControlCommand {
         val baseline = decisionService.evaluate(tenantId, telemetry)
 
         val activeSession =

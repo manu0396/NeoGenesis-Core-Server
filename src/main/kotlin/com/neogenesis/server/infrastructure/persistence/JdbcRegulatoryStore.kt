@@ -48,7 +48,10 @@ class JdbcRegulatoryStore(
         }
     }
 
-    override fun listCapas(tenantId: String, limit: Int): List<CapaRecord> {
+    override fun listCapas(
+        tenantId: String,
+        limit: Int,
+    ): List<CapaRecord> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -175,7 +178,10 @@ class JdbcRegulatoryStore(
         }
     }
 
-    override fun listRisks(tenantId: String, limit: Int): List<RiskRecord> {
+    override fun listRisks(
+        tenantId: String,
+        limit: Int,
+    ): List<RiskRecord> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
@@ -246,7 +252,10 @@ class JdbcRegulatoryStore(
         }
     }
 
-    override fun listDhfArtifacts(tenantId: String, limit: Int): List<DhfArtifact> {
+    override fun listDhfArtifacts(
+        tenantId: String,
+        limit: Int,
+    ): List<DhfArtifact> {
         return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
