@@ -37,6 +37,10 @@ data class AppConfig(
         EvidencePackConfig(
             enabled = false,
         ),
+    val auditBundle: AuditBundleConfig =
+        AuditBundleConfig(
+            enabled = false,
+        ),
     val host: String = "0.0.0.0",
     val port: Int = 8080,
     val env: String = "development",
@@ -123,6 +127,10 @@ data class AppConfig(
     )
 
     data class EvidencePackConfig(
+        val enabled: Boolean,
+    )
+
+    data class AuditBundleConfig(
         val enabled: Boolean,
     )
 
@@ -789,6 +797,13 @@ data class AppConfig(
                         enabled =
                             env("EVIDENCE_PACK_MODE")?.equals("true", ignoreCase = true)
                                 ?: config.bool("neogenesis.evidence.pack.mode")
+                                ?: false,
+                    ),
+                auditBundle =
+                    AuditBundleConfig(
+                        enabled =
+                            env("AUDIT_BUNDLE_MODE")?.equals("true", ignoreCase = true)
+                                ?: config.bool("neogenesis.audit.bundle.mode")
                                 ?: false,
                     ),
                 host = host,
