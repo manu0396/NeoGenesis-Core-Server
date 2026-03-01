@@ -92,6 +92,7 @@ Reference files:
 - `deploy/runbooks/production-readiness.md`
 - `docs/production-go-no-go-checklist.md`
 - `docs/production-evidence-runbook.md`
+- `docs/doks-deployment-runbook.md`
 
 ## Container Build
 
