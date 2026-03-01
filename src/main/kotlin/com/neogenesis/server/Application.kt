@@ -43,6 +43,8 @@ import com.neogenesis.server.infrastructure.grpc.regenops.RegenGatewayGrpcServic
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenMetricsGrpcService
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenProtocolGrpcService
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenRunGrpcService
+import com.neogenesis.server.infrastructure.grpc.regenops.RegenProtocolV1GrpcService
+import com.neogenesis.server.infrastructure.grpc.regenops.RegenRunV1GrpcService
 import com.neogenesis.server.infrastructure.observability.OpenTelemetrySetup
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
 import com.neogenesis.server.infrastructure.persistence.AuditLogRepository
@@ -533,6 +535,21 @@ fun Application.module() {
                         tenantInterceptor,
                         tracingInterceptor,
                     )
+
+                val protocolV1ServiceDefinition =
+                    ServerInterceptors.intercept(
+                        RegenProtocolV1GrpcService(regenOpsService),
+                        jwtAuthInterceptor,
+                        tenantInterceptor,
+                        tracingInterceptor,
+                    )
+                val runV1ServiceDefinition =
+                    ServerInterceptors.intercept(
+                        RegenRunV1GrpcService(regenOpsService),
+                        jwtAuthInterceptor,
+                        tenantInterceptor,
+                        tracingInterceptor,
+                    )
                 val gatewayServiceDefinition =
                     ServerInterceptors.intercept(
                         RegenGatewayGrpcService(regenOpsService),
@@ -557,6 +574,8 @@ fun Application.module() {
                                 bioPrintServiceDefinition,
                                 protocolServiceDefinition,
                                 runServiceDefinition,
+                                protocolV1ServiceDefinition,
+                                runV1ServiceDefinition,
                                 gatewayServiceDefinition,
                                 metricsServiceDefinition,
                             ),
