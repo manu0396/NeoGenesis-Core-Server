@@ -44,12 +44,11 @@ fun Route.connectorCertificationModule(auditTrailService: AuditTrailService) {
                     resourceId = request.connectorId,
                     outcome = "accepted",
                     requirementIds = listOf("REQ-ISO-006"),
-                    details =
-                        mapOf(
-                            "tenantId" to request.tenantId,
-                            "correlationId" to correlationId,
-                            "connectorVersion" to (request.connectorVersion ?: "unknown"),
-                        ),
+                    details = mapOf(
+                        "tenantId" to request.tenantId,
+                        "correlationId" to correlationId,
+                        "connectorVersion" to (request.connectorVersion ?: "unknown"),
+                    ),
                 ),
             )
 

@@ -30,7 +30,11 @@ fun Route.traceMetricsModule(
             val tenantId = call.requireTenantId()
             val runId = call.request.queryParameters["run_id"]?.trim().orEmpty()
             val baselineWindow = call.request.queryParameters["baseline_n"]?.toIntOrNull() ?: 5
-            val metricKey = call.request.queryParameters["metric_key"]?.trim().orEmpty().ifBlank { "pressure_kpa" }
+            val metricKey =
+                call.request.queryParameters["metric_key"]
+                    ?.trim()
+                    .orEmpty()
+                    .ifBlank { "pressure_kpa" }
             val zThreshold = call.request.queryParameters["z_threshold"]?.toDoubleOrNull() ?: 3.0
 
             val resolvedRunId = if (runId.isBlank()) latestRunId(dataSource, tenantId) else runId
@@ -40,12 +44,14 @@ fun Route.traceMetricsModule(
 
             val currentScore = regenOpsService.getReproducibilityScore(tenantId, resolvedRunId).score
             val baselineRuns = listBaselineRuns(dataSource, tenantId, resolvedRunId, baselineWindow)
-            val baselineScores = baselineRuns.mapNotNull { id ->
-                runCatching { regenOpsService.getReproducibilityScore(tenantId, id).score }.getOrNull()
-            }
+            val baselineScores =
+                baselineRuns.mapNotNull { id ->
+                    runCatching { regenOpsService.getReproducibilityScore(tenantId, id).score }.getOrNull()
+                }
             val baselineAvg = if (baselineScores.isEmpty()) currentScore else baselineScores.average()
 
-            val zMax = computeZScoreMax(dataSource, tenantId, resolvedRunId, metricKey)
+            val zMax =
+                computeZScoreMax(dataSource, tenantId, resolvedRunId, metricKey)
             if (zMax >= zThreshold) {
                 maybeInsertDriftAlert(
                     regenOpsStore,
