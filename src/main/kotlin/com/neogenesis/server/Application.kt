@@ -60,6 +60,9 @@ import com.neogenesis.server.modules.auditModule
 import com.neogenesis.server.modules.authModule
 import com.neogenesis.server.modules.billingModule
 import com.neogenesis.server.modules.bioinkModule
+import com.neogenesis.server.modules.commercial.CommercialRepository
+import com.neogenesis.server.modules.commercial.CommercialService
+import com.neogenesis.server.modules.commercial.commercialModule
 import com.neogenesis.server.modules.devicesModule
 import com.neogenesis.server.modules.healthModule
 import com.neogenesis.server.modules.jobsModule
@@ -146,6 +149,8 @@ fun Application.module() {
             provider = billingProvider,
         )
     billingService.seedPlans()
+    val commercialRepository = CommercialRepository(dataSource)
+    val commercialService = CommercialService(commercialRepository, auditTrailService)
 
     if (shouldBootstrapAdmin(appConfig)) {
         val bootstrapUser = appConfig.adminBootstrap.user
@@ -481,6 +486,11 @@ fun Application.module() {
         billingModule(
             billingService = billingService,
         )
+        if (appConfig.commercial.enabled) {
+            commercialModule(
+                service = commercialService,
+            )
+        }
         bioinkModule(
             jobRepository = jobRepository,
             auditLogRepository = auditLogRepository,
