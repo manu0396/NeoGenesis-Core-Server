@@ -1,4 +1,4 @@
-package com.neogenesis.server
+﻿package com.neogenesis.server
 
 import com.neogenesis.server.application.AuditTrailService
 import com.neogenesis.server.application.ControlDecisionService
@@ -394,7 +394,7 @@ fun Application.module() {
     }
 
     configureAuthentication(resolvedSecurityConfig.jwt, jwtVerifier)
-    configureTenantIsolation()
+    configureTenantIsolation(appConfig.runtime.isProduction())
     configureRateLimiting(appConfig)
 
     val abacPolicyEngine = DefaultAbacPolicyEngine()
@@ -760,3 +760,4 @@ private fun readServerVersion(): String {
         File("backend/VERSION").readText(Charsets.UTF_8).trim()
     }.getOrElse { "1.0.0" }
 }
+
