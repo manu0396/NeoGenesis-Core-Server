@@ -1,8 +1,7 @@
 @file:Suppress("ktlint:standard:no-wildcard-imports")
 
-import com.google.protobuf.gradle.*
-import java.io.File
 import org.cyclonedx.gradle.CycloneDxTask
+import java.io.File
 val ktorVersion = "3.0.3"
 val grpcVersion = "1.62.2"
 val grpcKotlinVersion = "1.4.1"
@@ -22,25 +21,29 @@ plugins {
     kotlin("jvm") version "2.0.21"
     id("io.ktor.plugin") version "3.0.3"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
-    id("com.google.protobuf") version "0.9.4"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
     id("io.gitlab.arturbosch.detekt") version "1.23.7"
     id("org.cyclonedx.bom") version "1.8.2"
 }
 
 group = "com.neogenesis"
-version = "1.0.0"
+version = "1.0.1"
+
+allprojects {
+    group = "com.neogenesis"
+    version = "1.0.1"
+    repositories {
+        mavenCentral()
+    }
+}
 
 application {
     mainClass.set("io.ktor.server.netty.EngineMain")
 }
 
-repositories {
-    mavenCentral()
-}
-
 dependencies {
     implementation(enforcedPlatform("io.netty:netty-bom:$nettyVersion"))
+    implementation(project(":contracts"))
 
     implementation("io.ktor:ktor-server-core-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-netty-jvm:$ktorVersion")
@@ -189,6 +192,14 @@ tasks.named("check") {
     dependsOn("traceabilityGate", "ktlintCheck", "detekt")
 }
 
+tasks.register("regenContracts") {
+    dependsOn(":contracts:generateProto")
+}
+
+tasks.register("checkContracts") {
+    dependsOn(":contracts:checkContracts")
+}
+
 ktlint {
     version.set("1.2.1")
     filter {
@@ -212,26 +223,4 @@ tasks.named<CycloneDxTask>("cyclonedxBom") {
     projectType = "application"
     outputName = "sbom"
     outputFormat = "json"
-}
-
-protobuf {
-    protoc {
-        artifact = "com.google.protobuf:protoc:$protobufVersion"
-    }
-    plugins {
-        id("grpc") {
-            artifact = "io.grpc:protoc-gen-grpc-java:$grpcVersion"
-        }
-        id("grpckt") {
-            artifact = "io.grpc:protoc-gen-grpc-kotlin:$grpcKotlinVersion:jdk8@jar"
-        }
-    }
-    generateProtoTasks {
-        all().forEach { task ->
-            task.plugins {
-                id("grpc")
-                id("grpckt")
-            }
-        }
-    }
 }
