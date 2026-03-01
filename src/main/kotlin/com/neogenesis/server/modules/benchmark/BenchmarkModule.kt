@@ -14,7 +14,9 @@ import java.sql.Timestamp
 import java.time.Instant
 import javax.sql.DataSource
 
-fun Route.benchmarkModule(dataSource: DataSource) {
+fun Route.benchmarkModule(
+    dataSource: DataSource,
+) {
     authenticate("auth-jwt") {
         get("/benchmark/opt-in") {
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR, CanonicalRole.AUDITOR)
@@ -38,7 +40,12 @@ fun Route.benchmarkModule(dataSource: DataSource) {
                         HttpStatusCode.BadRequest,
                     )
             upsertOptIn(dataSource, tenantId, enabled)
-            call.respond(BenchmarkOptInResponse(tenantId = tenantId, optedIn = enabled))
+            call.respond(
+                BenchmarkOptInResponse(
+                    tenantId = tenantId,
+                    optedIn = enabled,
+                ),
+            )
         }
 
         get("/benchmark/aggregates") {
@@ -55,12 +62,19 @@ fun Route.benchmarkModule(dataSource: DataSource) {
             val instrumentType = call.request.queryParameters["instrumentType"]?.trim()
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 200
             val aggregates = listAggregates(dataSource, protocolType, instrumentType, limit)
-            call.respond(BenchmarkAggregateResponse(aggregates = aggregates))
+            call.respond(
+                BenchmarkAggregateResponse(
+                    aggregates = aggregates,
+                ),
+            )
         }
     }
 }
 
-private fun readOptIn(dataSource: DataSource, tenantId: String): Boolean {
+private fun readOptIn(
+    dataSource: DataSource,
+    tenantId: String,
+): Boolean {
     return dataSource.connection.use { connection ->
         connection.prepareStatement(
             """

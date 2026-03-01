@@ -156,27 +156,27 @@ object AuditBundleBuilder {
             entries.joinToString(",") {
                 """{"path":"${it.path}","fileHash":"${it.fileHash}","previousHash":"${it.previousHash}","chainHash":"${it.chainHash}"}"""
             }
-        return """
-            |{
-            |  "entries": [$items],
-            |  "lastHash": "$lastHash"
-            |}
-        """.trimMargin()
+        return buildString {
+            appendLine("{")
+            appendLine("  \"entries\": [$items],")
+            appendLine("  \"lastHash\": \"$lastHash\"")
+            append("}")
+        }
     }
 
     private fun AuditBundleManifest.toJson(): String {
         val fileEntries =
             files.joinToString(",") { """{"path":"${it.path}","sha256":"${it.sha256}"}""" }
-        return """
-            |{
-            |  "jobId": "$jobId",
-            |  "tenantId": "$tenantId",
-            |  "generatedAt": "$generatedAt",
-            |  "serverVersion": "$serverVersion",
-            |  "files": [$fileEntries],
-            |  "bundleHash": "$bundleHash",
-            |  "hashAlgorithm": "$hashAlgorithm"
-            |}
-        """.trimMargin()
+        return buildString {
+            appendLine("{")
+            appendLine("  \"jobId\": \"$jobId\",")
+            appendLine("  \"tenantId\": \"$tenantId\",")
+            appendLine("  \"generatedAt\": \"$generatedAt\",")
+            appendLine("  \"serverVersion\": \"$serverVersion\",")
+            appendLine("  \"files\": [$fileEntries],")
+            appendLine("  \"bundleHash\": \"$bundleHash\",")
+            appendLine("  \"hashAlgorithm\": \"$hashAlgorithm\"")
+            append("}")
+        }
     }
 }

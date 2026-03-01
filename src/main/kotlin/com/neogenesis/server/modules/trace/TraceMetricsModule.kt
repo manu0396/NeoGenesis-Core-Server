@@ -81,7 +81,11 @@ fun Route.traceMetricsModule(
             val runId = call.request.queryParameters["run_id"]?.trim()
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 200
             val alerts = listAlerts(dataSource, tenantId, runId, limit)
-            call.respond(MetricsAlertsResponse(alerts = alerts))
+            call.respond(
+                MetricsAlertsResponse(
+                    alerts = alerts,
+                ),
+            )
         }
     }
 }
@@ -98,9 +102,13 @@ private fun latestRunId(dataSource: DataSource, tenantId: String): String {
             """.trimIndent(),
         ).use { statement ->
             statement.setString(1, tenantId)
-                statement.executeQuery().use { rs ->
-                    if (rs.next()) rs.getString("run_id") else ""
+            statement.executeQuery().use { rs ->
+                if (rs.next()) {
+                    rs.getString("run_id")
+                } else {
+                    ""
                 }
+            }
         }
     }
 }

@@ -346,39 +346,34 @@ private object SimplePdfBuilder {
         val content = buildContent(lines)
         val contentBytes = content.toByteArray(Charsets.US_ASCII)
         val objects = mutableListOf<String>()
-        objects +=
-            """
-            1 0 obj
-            << /Type /Catalog /Pages 2 0 R >>
-            endobj
-            """.trimIndent() + "\n"
-        objects +=
-            """
-            2 0 obj
-            << /Type /Pages /Kids [3 0 R] /Count 1 >>
-            endobj
-            """.trimIndent() + "\n"
-        objects +=
-            """
-            3 0 obj
-            << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
-            endobj
-            """.trimIndent() + "\n"
-        objects +=
-            """
-            4 0 obj
-            << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
-            endobj
-            """.trimIndent() + "\n"
-        objects +=
-            """
-            5 0 obj
-            << /Length ${contentBytes.size} >>
-            stream
-            $content
-            endstream
-            endobj
-            """.trimIndent() + "\n"
+        objects += buildPdfObject(
+            "1 0 obj",
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "endobj",
+        )
+        objects += buildPdfObject(
+            "2 0 obj",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "endobj",
+        )
+        objects += buildPdfObject(
+            "3 0 obj",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+            "endobj",
+        )
+        objects += buildPdfObject(
+            "4 0 obj",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            "endobj",
+        )
+        objects += buildPdfObject(
+            "5 0 obj",
+            "<< /Length ${contentBytes.size} >>",
+            "stream",
+            content,
+            "endstream",
+            "endobj",
+        )
 
         val header = "%PDF-1.4\n"
         val offsets = mutableListOf<Int>()
@@ -405,6 +400,12 @@ private object SimplePdfBuilder {
         output.append(xref)
         output.append(trailer)
         return output.toString().toByteArray(Charsets.US_ASCII)
+    }
+
+    private fun buildPdfObject(vararg lines: String): String {
+        return buildString {
+            lines.forEach { appendLine(it) }
+        }
     }
 
     private fun buildContent(lines: List<String>): String {
