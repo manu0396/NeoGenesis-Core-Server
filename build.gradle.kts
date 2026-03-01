@@ -18,6 +18,7 @@ val postgresqlVersion = "42.7.7"
 val stripeVersion = "25.5.0"
 
 plugins {
+    application
     kotlin("jvm") version "2.0.21"
     id("io.ktor.plugin") version "3.0.3"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
@@ -38,7 +39,7 @@ allprojects {
 }
 
 application {
-    mainClass.set("io.ktor.server.netty.EngineMain")
+    mainClass.set("com.neogenesis.server.ApplicationKt")
 }
 
 dependencies {
@@ -187,6 +188,12 @@ tasks.register("traceabilityGate") {
 
         println("Traceability gate passed for ${requirements.size} requirements.")
     }
+}
+
+tasks.register("runCoreServer") {
+    group = "application"
+    description = "Run NeoGenesis Core Server (root project)"
+    dependsOn("run")
 }
 
 tasks.named("check") {

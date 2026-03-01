@@ -1,6 +1,7 @@
 package com.neogenesis.server.infrastructure.config
 
 import io.ktor.server.config.ApplicationConfig
+import java.util.Locale
 
 data class AppConfig(
     val runtime: RuntimeConfig,
@@ -359,6 +360,7 @@ data class AppConfig(
     )
 
     companion object {
+        const val ENV_PRODUCTION = "production"
         fun from(config: ApplicationConfig): AppConfig {
             val host =
                 env("HOST")
@@ -371,11 +373,17 @@ data class AppConfig(
                     ?: config.string("ktor.deployment.port")?.toIntOrNull()
                     ?: 8080
 
-            val environmentName =
+            val rawEnvironment =
                 env("ENV")
                     ?: env("NEOGENESIS_RUNTIME_ENVIRONMENT")
                     ?: config.string("neogenesis.runtime.environment")
                     ?: "development"
+
+            val environmentName =
+                rawEnvironment
+                    .trim()
+                    .lowercase(Locale.ROOT)
+                    .let { if (it == "prod") ENV_PRODUCTION else it }
 
             val jwtSecret =
                 env("JWT_SECRET")
@@ -479,15 +487,12 @@ data class AppConfig(
                             ?: config.string("neogenesis.adminBootstrap.passwordHash"),
                 )
 
-            if (environmentName.equals("prod", ignoreCase = true) || environmentName.equals("production", ignoreCase = true)) {
+            if (environmentName == ENV_PRODUCTION) {
                 require(jwtSecret.isNotBlank()) { "JWT_SECRET is required when ENV=prod" }
                 require(dbPassword.isNotBlank()) { "DB_PASSWORD is required when ENV=prod" }
             }
 
-            val runtimeConfig =
-                RuntimeConfig(
-                    environment = environmentName,
-                )
+            val runtimeConfig = RuntimeConfig(environment = environmentName)
             val grpcPort = config.string("neogenesis.grpcPort")?.toIntOrNull() ?: 50051
 
             val databaseConfig =
