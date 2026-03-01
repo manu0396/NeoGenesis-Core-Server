@@ -33,6 +33,10 @@ data class AppConfig(
         AdminApiConfig(
             enabled = false,
         ),
+    val evidencePack: EvidencePackConfig =
+        EvidencePackConfig(
+            enabled = false,
+        ),
     val host: String = "0.0.0.0",
     val port: Int = 8080,
     val env: String = "development",
@@ -115,6 +119,10 @@ data class AppConfig(
     )
 
     data class AdminApiConfig(
+        val enabled: Boolean,
+    )
+
+    data class EvidencePackConfig(
         val enabled: Boolean,
     )
 
@@ -774,6 +782,13 @@ data class AppConfig(
                         enabled =
                             env("ADMIN_API_MODE")?.equals("true", ignoreCase = true)
                                 ?: config.bool("neogenesis.admin.api.mode")
+                                ?: false,
+                    ),
+                evidencePack =
+                    EvidencePackConfig(
+                        enabled =
+                            env("EVIDENCE_PACK_MODE")?.equals("true", ignoreCase = true)
+                                ?: config.bool("neogenesis.evidence.pack.mode")
                                 ?: false,
                     ),
                 host = host,
