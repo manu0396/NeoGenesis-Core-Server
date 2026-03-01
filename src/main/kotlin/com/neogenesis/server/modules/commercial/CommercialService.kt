@@ -10,7 +10,14 @@ class CommercialService(
     private val repository: CommercialRepository,
     private val auditTrailService: AuditTrailService,
 ) {
-    fun createAccount(tenantId: String, name: String, country: String?, industry: String?, website: String?, actorId: String): CommercialAccount {
+    fun createAccount(
+        tenantId: String,
+        name: String,
+        country: String?,
+        industry: String?,
+        website: String?,
+        actorId: String,
+    ): CommercialAccount {
         val now = OffsetDateTime.now(ZoneOffset.UTC)
         val account =
             CommercialAccount(
@@ -24,7 +31,13 @@ class CommercialService(
                 updatedAt = now,
             )
         repository.createAccount(account)
-        audit("commercial.account.create", tenantId, actorId, account.id, account.name)
+        audit(
+            "commercial.account.create",
+            tenantId,
+            actorId,
+            account.id,
+            account.name,
+        )
         repository.logActivity(
             CommercialActivity(
                 id = UUID.randomUUID(),
@@ -40,7 +53,15 @@ class CommercialService(
         return account
     }
 
-    fun updateAccount(tenantId: String, accountId: UUID, name: String, country: String?, industry: String?, website: String?, actorId: String): CommercialAccount {
+    fun updateAccount(
+        tenantId: String,
+        accountId: UUID,
+        name: String,
+        country: String?,
+        industry: String?,
+        website: String?,
+        actorId: String,
+    ): CommercialAccount {
         val now = OffsetDateTime.now(ZoneOffset.UTC)
         val account =
             CommercialAccount(
@@ -54,7 +75,13 @@ class CommercialService(
                 updatedAt = now,
             )
         repository.updateAccount(account)
-        audit("commercial.account.update", tenantId, actorId, account.id, account.name)
+        audit(
+            "commercial.account.update",
+            tenantId,
+            actorId,
+            account.id,
+            account.name,
+        )
         repository.logActivity(
             CommercialActivity(
                 id = UUID.randomUUID(),
@@ -95,7 +122,13 @@ class CommercialService(
                 updatedAt = now,
             )
         repository.createContact(contact)
-        audit("commercial.contact.create", tenantId, actorId, contact.id, contact.fullName)
+        audit(
+            "commercial.contact.create",
+            tenantId,
+            actorId,
+            contact.id,
+            contact.fullName,
+        )
         repository.logActivity(
             CommercialActivity(
                 id = UUID.randomUUID(),
@@ -111,7 +144,10 @@ class CommercialService(
         return contact
     }
 
-    fun listContacts(tenantId: String, accountId: UUID?): List<CommercialContact> = repository.listContacts(tenantId, accountId)
+    fun listContacts(
+        tenantId: String,
+        accountId: UUID?,
+    ): List<CommercialContact> = repository.listContacts(tenantId, accountId)
 
     fun createOpportunity(
         tenantId: String,
@@ -140,7 +176,13 @@ class CommercialService(
                 updatedAt = now,
             )
         repository.createOpportunity(opportunity)
-        audit("commercial.opportunity.create", tenantId, actorId, opportunity.id, opportunity.stage.name)
+        audit(
+            "commercial.opportunity.create",
+            tenantId,
+            actorId,
+            opportunity.id,
+            opportunity.stage.name,
+        )
         repository.logActivity(
             CommercialActivity(
                 id = UUID.randomUUID(),
@@ -184,7 +226,13 @@ class CommercialService(
                 updatedAt = now,
             )
         repository.updateOpportunity(opportunity)
-        audit("commercial.opportunity.update", tenantId, actorId, opportunity.id, opportunity.stage.name)
+        audit(
+            "commercial.opportunity.update",
+            tenantId,
+            actorId,
+            opportunity.id,
+            opportunity.stage.name,
+        )
         repository.logActivity(
             CommercialActivity(
                 id = UUID.randomUUID(),
@@ -200,7 +248,10 @@ class CommercialService(
         return opportunity
     }
 
-    fun listOpportunities(tenantId: String, stage: OpportunityStage?): List<CommercialOpportunity> = repository.listOpportunities(tenantId, stage)
+    fun listOpportunities(
+        tenantId: String,
+        stage: OpportunityStage?,
+    ): List<CommercialOpportunity> = repository.listOpportunities(tenantId, stage)
 
     fun createLoi(
         tenantId: String,
@@ -225,7 +276,13 @@ class CommercialService(
                 updatedAt = now,
             )
         repository.createLoi(loi)
-        audit("commercial.loi.create", tenantId, actorId, loi.id, loi.status)
+        audit(
+            "commercial.loi.create",
+            tenantId,
+            actorId,
+            loi.id,
+            loi.status,
+        )
         repository.logActivity(
             CommercialActivity(
                 id = UUID.randomUUID(),
@@ -250,7 +307,13 @@ class CommercialService(
     ) {
         val now = OffsetDateTime.now(ZoneOffset.UTC)
         repository.updateLoiAttachment(tenantId, loiId, attachmentRef, status, now)
-        audit("commercial.loi.attachment", tenantId, actorId, loiId, status)
+        audit(
+            "commercial.loi.attachment",
+            tenantId,
+            actorId,
+            loiId,
+            status,
+        )
         repository.logActivity(
             CommercialActivity(
                 id = UUID.randomUUID(),
@@ -265,20 +328,33 @@ class CommercialService(
         )
     }
 
-    fun listLois(tenantId: String, opportunityId: UUID?): List<CommercialLoi> = repository.listLois(tenantId, opportunityId)
+    fun listLois(
+        tenantId: String,
+        opportunityId: UUID?,
+    ): List<CommercialLoi> = repository.listLois(tenantId, opportunityId)
 
     fun pipelineSummary(tenantId: String): PipelineSummary = repository.pipelineSummary(tenantId)
 
-    private fun audit(action: String, tenantId: String, actorId: String, entityId: UUID, details: String) {
+    private fun audit(
+        action: String,
+        tenantId: String,
+        actorId: String,
+        entityId: UUID,
+        details: String,
+    ) {
         auditTrailService.record(
             AuditEvent(
-                tenantId = tenantId,
-                actorId = actorId,
+                actor = actorId,
                 action = action,
-                entityId = entityId.toString(),
-                entityType = "commercial",
+                resourceType = "commercial",
+                resourceId = entityId.toString(),
                 outcome = "success",
-                details = details,
+                requirementIds = listOf("REQ-ISO-001"),
+                details =
+                    mapOf(
+                        "tenantId" to tenantId,
+                        "summary" to details,
+                    ),
             ),
         )
     }
