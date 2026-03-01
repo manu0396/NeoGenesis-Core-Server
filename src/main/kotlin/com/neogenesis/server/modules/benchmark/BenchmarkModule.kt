@@ -14,9 +14,7 @@ import java.sql.Timestamp
 import java.time.Instant
 import javax.sql.DataSource
 
-fun Route.benchmarkModule(
-    dataSource: DataSource,
-) {
+fun Route.benchmarkModule(dataSource: DataSource) {
     authenticate("auth-jwt") {
         get("/benchmark/opt-in") {
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR, CanonicalRole.AUDITOR)

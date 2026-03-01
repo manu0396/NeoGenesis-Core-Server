@@ -30,11 +30,7 @@ fun Route.traceMetricsModule(
             val tenantId = call.requireTenantId()
             val runId = call.request.queryParameters["run_id"]?.trim().orEmpty()
             val baselineWindow = call.request.queryParameters["baseline_n"]?.toIntOrNull() ?: 5
-            val metricKey =
-                call.request.queryParameters["metric_key"]
-                    ?.trim()
-                    .orEmpty()
-                    .ifBlank { "pressure_kpa" }
+            val metricKey = call.request.queryParameters["metric_key"]?.trim().orEmpty().ifBlank { "pressure_kpa" }
             val zThreshold = call.request.queryParameters["z_threshold"]?.toDoubleOrNull() ?: 3.0
 
             val resolvedRunId = if (runId.isBlank()) latestRunId(dataSource, tenantId) else runId

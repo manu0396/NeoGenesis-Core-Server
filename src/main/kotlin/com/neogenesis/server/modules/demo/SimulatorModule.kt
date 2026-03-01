@@ -20,7 +20,6 @@ import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.time.Instant
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -290,10 +289,10 @@ private class SimulatorGenerator(
             val timestamp = startMs + (index * intervalMs)
             val phase =
                 when {
-                index < samples / 3 -> "stabilizing"
-                index < (samples * 2 / 3) -> "printing"
-                else -> "cooldown"
-            }
+                    index < samples / 3 -> "stabilizing"
+                    index < (samples * 2 / 3) -> "printing"
+                    else -> "cooldown"
+                }
             if (index % 20 == 0) {
                 events += buildEvent("sim.phase", timestamp, "{\"phase\":\"$phase\"}")
             }
