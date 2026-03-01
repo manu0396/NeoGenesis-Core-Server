@@ -18,6 +18,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.sql.ResultSet
+import java.sql.SQLException
 import java.sql.Timestamp
 import java.time.Instant
 import javax.sql.DataSource
@@ -346,7 +347,7 @@ class JdbcLatencyBreachStore(private val dataSource: DataSource) : LatencyBreach
     }
 }
 
-class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStore {
+class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
     override fun enqueue(eventType: String, partitionKey: String, payloadJson: String) {
         dataSource.connection.use { connection ->
             connection.prepareStatement(
@@ -358,10 +359,11 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
                     status,
                     attempts,
                     next_attempt_at,
+                    processing_started_at,
                     last_error,
                     created_at,
                     processed_at
-                ) VALUES (?, ?, ?, 'PENDING', 0, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, 'PENDING', 0, ?, ?, ?, ?, ?)
                 """.trimIndent()
             ).use { statement ->
                 val now = Timestamp.from(Instant.now())
@@ -369,9 +371,10 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
                 statement.setString(2, partitionKey)
                 statement.setString(3, payloadJson)
                 statement.setTimestamp(4, now)
-                statement.setString(5, null)
-                statement.setTimestamp(6, now)
-                statement.setTimestamp(7, null)
+                statement.setTimestamp(5, null)
+                statement.setString(6, null)
+                statement.setTimestamp(7, now)
+                statement.setTimestamp(8, null)
                 statement.executeUpdate()
             }
         }
@@ -389,6 +392,7 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
                     status,
                     attempts,
                     next_attempt_at,
+                    processing_started_at,
                     last_error,
                     created_at,
                     processed_at
@@ -411,6 +415,18 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
         }
     }
 
+    override fun claimPending(limit: Int, processingTtlMs: Long): List<ServerlessOutboxEvent> {
+        if (limit <= 0) {
+            return emptyList()
+        }
+
+        return try {
+            claimPendingWithSkipLocked(limit = limit, processingTtlMs = processingTtlMs)
+        } catch (_: SQLException) {
+            claimPendingWithOptimisticClaim(limit = limit, processingTtlMs = processingTtlMs)
+        }
+    }
+
     override fun markProcessed(eventId: Long) {
         dataSource.connection.use { connection ->
             connection.prepareStatement(
@@ -420,6 +436,7 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
                     status = 'PROCESSED',
                     attempts = attempts + 1,
                     processed_at = ?,
+                    processing_started_at = NULL,
                     next_attempt_at = NULL,
                     last_error = NULL
                 WHERE id = ?
@@ -441,6 +458,7 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
                     status = 'PENDING',
                     attempts = attempts + 1,
                     next_attempt_at = ?,
+                    processing_started_at = NULL,
                     last_error = ?,
                     processed_at = NULL
                 WHERE id = ?
@@ -496,6 +514,7 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
                     status = 'FAILED',
                     attempts = attempts + 1,
                     processed_at = ?,
+                    processing_started_at = NULL,
                     next_attempt_at = NULL,
                     last_error = ?
                 WHERE id = ?
@@ -553,6 +572,7 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
                         status,
                         attempts,
                         next_attempt_at,
+                        processing_started_at,
                         last_error,
                         created_at,
                         processed_at
@@ -564,6 +584,7 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
                         'PENDING',
                         0,
                         CURRENT_TIMESTAMP,
+                        NULL,
                         NULL,
                         CURRENT_TIMESTAMP,
                         NULL
@@ -600,6 +621,192 @@ class JdbcOutboxEventStore(private val dataSource: DataSource) : OutboxEventStor
     }
 }
 
+private fun JdbcOutboxEventStore.claimPendingWithSkipLocked(
+    limit: Int,
+    processingTtlMs: Long
+): List<ServerlessOutboxEvent> {
+    return dataSource.connection.use { connection ->
+        connection.autoCommit = false
+        try {
+            releaseExpiredClaims(connection, processingTtlMs)
+            val ids = connection.prepareStatement(
+                """
+                SELECT id
+                FROM integration_outbox
+                WHERE status = 'PENDING'
+                  AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
+                ORDER BY id ASC
+                LIMIT ?
+                FOR UPDATE SKIP LOCKED
+                """.trimIndent()
+            ).use { statement ->
+                statement.setInt(1, limit)
+                statement.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(rs.getLong("id"))
+                        }
+                    }
+                }
+            }
+
+            if (ids.isEmpty()) {
+                connection.commit()
+                return emptyList()
+            }
+
+            connection.prepareStatement(
+                """
+                UPDATE integration_outbox
+                SET
+                    status = 'PROCESSING',
+                    processing_started_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND status = 'PENDING'
+                """.trimIndent()
+            ).use { statement ->
+                ids.forEach { id ->
+                    statement.setLong(1, id)
+                    statement.addBatch()
+                }
+                statement.executeBatch()
+            }
+
+            val events = selectOutboxEventsByIds(connection, ids)
+            connection.commit()
+            events
+        } catch (error: Exception) {
+            connection.rollback()
+            throw error
+        } finally {
+            connection.autoCommit = true
+        }
+    }
+}
+
+private fun JdbcOutboxEventStore.claimPendingWithOptimisticClaim(
+    limit: Int,
+    processingTtlMs: Long
+): List<ServerlessOutboxEvent> {
+    return dataSource.connection.use { connection ->
+        connection.autoCommit = false
+        try {
+            releaseExpiredClaims(connection, processingTtlMs)
+            val candidates = connection.prepareStatement(
+                """
+                SELECT id
+                FROM integration_outbox
+                WHERE status = 'PENDING'
+                  AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
+                ORDER BY id ASC
+                LIMIT ?
+                """.trimIndent()
+            ).use { statement ->
+                statement.setInt(1, limit)
+                statement.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(rs.getLong("id"))
+                        }
+                    }
+                }
+            }
+
+            val claimed = mutableListOf<Long>()
+            connection.prepareStatement(
+                """
+                UPDATE integration_outbox
+                SET
+                    status = 'PROCESSING',
+                    processing_started_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND status = 'PENDING'
+                """.trimIndent()
+            ).use { statement ->
+                candidates.forEach { id ->
+                    statement.setLong(1, id)
+                    val updated = statement.executeUpdate()
+                    if (updated > 0) {
+                        claimed += id
+                    }
+                }
+            }
+
+            val events = selectOutboxEventsByIds(connection, claimed)
+            connection.commit()
+            events
+        } catch (error: Exception) {
+            connection.rollback()
+            throw error
+        } finally {
+            connection.autoCommit = true
+        }
+    }
+}
+
+private fun JdbcOutboxEventStore.releaseExpiredClaims(
+    connection: java.sql.Connection,
+    processingTtlMs: Long
+) {
+    val ttlMs = processingTtlMs.coerceAtLeast(60_000L)
+    val cutoff = Timestamp.from(Instant.ofEpochMilli(System.currentTimeMillis() - ttlMs))
+    connection.prepareStatement(
+        """
+        UPDATE integration_outbox
+        SET
+            status = 'PENDING',
+            processing_started_at = NULL
+        WHERE status = 'PROCESSING'
+          AND processing_started_at IS NOT NULL
+          AND processing_started_at < ?
+        """.trimIndent()
+    ).use { statement ->
+        statement.setTimestamp(1, cutoff)
+        statement.executeUpdate()
+    }
+}
+
+private fun JdbcOutboxEventStore.selectOutboxEventsByIds(
+    connection: java.sql.Connection,
+    ids: List<Long>
+): List<ServerlessOutboxEvent> {
+    if (ids.isEmpty()) {
+        return emptyList()
+    }
+    val placeholders = ids.joinToString(",") { "?" }
+    return connection.prepareStatement(
+        """
+        SELECT
+            id,
+            event_type,
+            partition_key,
+            payload_json,
+            status,
+            attempts,
+            next_attempt_at,
+            processing_started_at,
+            last_error,
+            created_at,
+            processed_at
+        FROM integration_outbox
+        WHERE id IN ($placeholders)
+          AND status = 'PROCESSING'
+        ORDER BY id ASC
+        """.trimIndent()
+    ).use { statement ->
+        ids.forEachIndexed { index, id ->
+            statement.setLong(index + 1, id)
+        }
+        statement.executeQuery().use { rs ->
+            buildList {
+                while (rs.next()) {
+                    add(rs.toOutboxEvent())
+                }
+            }
+        }
+    }
+}
+
 private fun ResultSet.toRetinalPlan(): RetinalPrintPlan {
     return RetinalPrintPlan(
         planId = getString("plan_id"),
@@ -627,6 +834,7 @@ private fun ResultSet.toPrintSession(): PrintSession {
 private fun ResultSet.toOutboxEvent(): ServerlessOutboxEvent {
     val processedAt = getTimestamp("processed_at")
     val nextAttemptAt = getTimestamp("next_attempt_at")
+    val processingStartedAt = runCatching { getTimestamp("processing_started_at") }.getOrNull()
     return ServerlessOutboxEvent(
         id = getLong("id"),
         eventType = getString("event_type"),
@@ -635,6 +843,7 @@ private fun ResultSet.toOutboxEvent(): ServerlessOutboxEvent {
         status = OutboxEventStatus.valueOf(getString("status")),
         attempts = getInt("attempts"),
         createdAtMs = getTimestamp("created_at").time,
+        processingStartedAtMs = processingStartedAt?.time,
         processedAtMs = processedAt?.time,
         nextAttemptAtMs = nextAttemptAt?.time,
         lastError = getString("last_error")

@@ -1,5 +1,6 @@
 package com.neogenesis.server.application.resilience
 
+import com.neogenesis.server.application.error.DependencyUnavailableException
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -26,7 +27,10 @@ class IntegrationResilienceExecutor(
         val openedAt = state.openedUntilMs
         if (openedAt > now) {
             metricsService.recordCircuitBreakerEvent(integration, "open_reject")
-            throw IllegalStateException("Circuit breaker open for integration=$integration")
+            throw DependencyUnavailableException(
+                code = "integration_circuit_open",
+                message = "Circuit breaker open for integration=$integration"
+            )
         }
 
         return try {
@@ -39,7 +43,10 @@ class IntegrationResilienceExecutor(
         } catch (_: TimeoutException) {
             markFailure(state, integration)
             metricsService.recordIntegrationTimeout(integration, operation)
-            throw IllegalStateException("Timeout budget exceeded for $integration.$operation")
+            throw DependencyUnavailableException(
+                code = "integration_timeout",
+                message = "Timeout budget exceeded for $integration.$operation"
+            )
         } catch (error: Exception) {
             markFailure(state, integration)
             metricsService.recordCircuitBreakerEvent(integration, "failure")

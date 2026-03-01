@@ -83,6 +83,7 @@ class ServerlessDispatchServiceTest {
             status = OutboxEventStatus.PENDING,
             attempts = attempts,
             createdAtMs = System.currentTimeMillis(),
+            processingStartedAtMs = null,
             processedAtMs = null,
             nextAttemptAtMs = System.currentTimeMillis(),
             lastError = null
@@ -99,6 +100,7 @@ class ServerlessDispatchServiceTest {
         override fun enqueue(eventType: String, partitionKey: String, payloadJson: String) = Unit
 
         override fun pending(limit: Int): List<ServerlessOutboxEvent> = pending.take(limit)
+        override fun claimPending(limit: Int, processingTtlMs: Long): List<ServerlessOutboxEvent> = pending.take(limit)
 
         override fun markProcessed(eventId: Long) {
             processed += eventId

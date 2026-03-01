@@ -6,6 +6,8 @@ import com.neogenesis.server.application.clinical.ClinicalIntegrationService
 import com.neogenesis.server.application.clinical.ClinicalDimseService
 import com.neogenesis.server.application.clinical.ClinicalPacsService
 import com.neogenesis.server.application.clinical.FhirCohortAnalyticsService
+import com.neogenesis.server.application.error.BadRequestException
+import com.neogenesis.server.application.error.DependencyUnavailableException
 import com.neogenesis.server.application.clinical.Hl7MllpGatewayService
 import com.neogenesis.server.application.compliance.ComplianceTraceabilityService
 import com.neogenesis.server.application.compliance.GdprService
@@ -36,19 +38,21 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
-import io.ktor.server.plugins.callid.callId
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.micrometer.prometheus.PrometheusMeterRegistry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import java.time.Instant
 import java.util.Base64
+import javax.sql.DataSource
 
 fun Route.healthRoutes(
     grpcPort: Int,
-    traceabilityService: ComplianceTraceabilityService
+    traceabilityService: ComplianceTraceabilityService,
+    dataSource: DataSource
 ) {
     get("/health") {
         call.respond(
@@ -66,11 +70,18 @@ fun Route.healthRoutes(
     }
 
     get("/health/ready") {
-        val ready = traceabilityService.allRequirements().isNotEmpty()
+        val checks = linkedMapOf(
+            "traceability_loaded" to traceabilityService.allRequirements().isNotEmpty(),
+            "database_reachable" to isDatabaseReachable(dataSource)
+        )
+        val ready = checks.values.all { it }
         if (ready) {
-            call.respond(HealthProbeResponse(status = "ready"))
+            call.respond(HealthProbeResponse(status = "ready", checks = checks))
         } else {
-            call.respond(HttpStatusCode.ServiceUnavailable, HealthProbeResponse(status = "not_ready"))
+            call.respond(
+                HttpStatusCode.ServiceUnavailable,
+                HealthProbeResponse(status = "not_ready", checks = checks)
+            )
         }
     }
 }
@@ -213,7 +224,9 @@ fun Route.clinicalRoutes(
                 )
                 val doc = clinicalIntegrationService.ingestFhir(request.resourceJson, call.actor())
                 call.respond(doc.toResponse())
-            } catch (_: Exception) {
+            } catch (_: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("Invalid FHIR payload"))
+            } catch (_: SerializationException) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("Invalid FHIR payload"))
             }
         }
@@ -229,7 +242,9 @@ fun Route.clinicalRoutes(
                 )
                 val doc = clinicalIntegrationService.ingestHl7(request.message, call.actor())
                 call.respond(doc.toResponse())
-            } catch (_: Exception) {
+            } catch (_: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("Invalid HL7 payload"))
+            } catch (_: SerializationException) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("Invalid HL7 payload"))
             }
         }
@@ -245,7 +260,9 @@ fun Route.clinicalRoutes(
                 )
                 val doc = clinicalIntegrationService.ingestDicomMetadata(request.metadataJson, call.actor())
                 call.respond(doc.toResponse())
-            } catch (_: Exception) {
+            } catch (_: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("Invalid DICOM metadata payload"))
+            } catch (_: SerializationException) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("Invalid DICOM metadata payload"))
             }
         }
@@ -263,7 +280,7 @@ fun Route.clinicalRoutes(
                     patientId = request.patientId,
                     actor = call.actor()
                 )
-            } catch (_: IllegalStateException) {
+            } catch (_: DependencyUnavailableException) {
                 call.respond(HttpStatusCode.ServiceUnavailable, ApiError("PACS integration is disabled"))
                 return@post
             }
@@ -304,7 +321,7 @@ fun Route.clinicalRoutes(
                     queryKeys = request.queryKeys,
                     returnKeys = request.returnKeys.ifEmpty { listOf("StudyInstanceUID") }
                 )
-            } catch (_: IllegalStateException) {
+            } catch (_: DependencyUnavailableException) {
                 call.respond(HttpStatusCode.ServiceUnavailable, ApiError("DIMSE integration is disabled"))
                 return@post
             }
@@ -324,7 +341,7 @@ fun Route.clinicalRoutes(
                     studyInstanceUid = request.studyInstanceUid,
                     destinationAeTitle = request.destinationAeTitle
                 )
-            } catch (_: IllegalStateException) {
+            } catch (_: DependencyUnavailableException) {
                 call.respond(HttpStatusCode.ServiceUnavailable, ApiError("DIMSE integration is disabled"))
                 return@post
             }
@@ -343,7 +360,7 @@ fun Route.clinicalRoutes(
                 clinicalDimseService.cGet(
                     studyInstanceUid = request.studyInstanceUid
                 )
-            } catch (_: IllegalStateException) {
+            } catch (_: DependencyUnavailableException) {
                 call.respond(HttpStatusCode.ServiceUnavailable, ApiError("DIMSE integration is disabled"))
                 return@post
             }
@@ -377,7 +394,7 @@ fun Route.clinicalRoutes(
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 20) ?: 5
             val payload = try {
                 clinicalPacsService.queryStudies(patientId, limit)
-            } catch (_: IllegalStateException) {
+            } catch (_: DependencyUnavailableException) {
                 call.respond(HttpStatusCode.ServiceUnavailable, ApiError("PACS integration is disabled"))
                 return@get
             }
@@ -774,7 +791,8 @@ private data class HealthResponse(
 
 @Serializable
 private data class HealthProbeResponse(
-    val status: String
+    val status: String,
+    val checks: Map<String, Boolean> = emptyMap()
 )
 
 @Serializable
@@ -1070,14 +1088,27 @@ private fun io.ktor.server.application.ApplicationCall.enforceIdempotency(
     val header = request.headers["Idempotency-Key"]?.trim().orEmpty()
     if (header.isBlank()) {
         if (requireKey) {
-            error("Missing Idempotency-Key header")
+            throw BadRequestException(
+                code = "missing_idempotency_key",
+                message = "Missing Idempotency-Key header"
+            )
         }
         return
     }
-    val correlationId = callId ?: "no-correlation-id"
     idempotencyService.assertOrRemember(
         operation = operation,
         idempotencyKey = header,
-        canonicalPayload = "$correlationId|$canonicalPayload"
+        canonicalPayload = canonicalPayload
     )
+}
+
+private fun isDatabaseReachable(dataSource: DataSource): Boolean {
+    return runCatching {
+        dataSource.connection.use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("SELECT 1")
+            }
+        }
+        true
+    }.getOrDefault(false)
 }

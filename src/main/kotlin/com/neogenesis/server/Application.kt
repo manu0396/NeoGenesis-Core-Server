@@ -12,6 +12,9 @@ import com.neogenesis.server.application.clinical.Hl7MllpGatewayService
 import com.neogenesis.server.application.compliance.ComplianceTraceabilityService
 import com.neogenesis.server.application.compliance.GdprService
 import com.neogenesis.server.application.compliance.RegulatoryComplianceService
+import com.neogenesis.server.application.error.BadRequestException
+import com.neogenesis.server.application.error.ConflictException
+import com.neogenesis.server.application.error.DependencyUnavailableException
 import com.neogenesis.server.application.resilience.IntegrationResilienceExecutor
 import com.neogenesis.server.application.resilience.RequestIdempotencyService
 import com.neogenesis.server.application.serverless.OutboxRetryPolicy
@@ -77,6 +80,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.application.hooks.CallFailed
 import io.ktor.server.application.install
 import io.ktor.server.metrics.micrometer.MicrometerMetrics
 import io.ktor.server.netty.EngineMain
@@ -85,6 +89,8 @@ import io.ktor.server.plugins.callid.callId
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics
@@ -96,6 +102,7 @@ import io.micrometer.prometheus.PrometheusMeterRegistry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
+import org.slf4j.MDC
 import java.util.concurrent.TimeUnit
 import javax.sql.DataSource
 import kotlinx.coroutines.CoroutineScope
@@ -146,6 +153,26 @@ fun Application.module() {
         level = Level.INFO
     }
 
+    install(
+        createApplicationPlugin("RequestMdcContext") {
+            onCall { call ->
+                MDC.put("correlation_id", call.callId ?: "no-correlation-id")
+                MDC.put("method", call.request.httpMethod.value)
+                MDC.put("path", call.request.path())
+            }
+            onCallRespond { _, _ ->
+                MDC.remove("correlation_id")
+                MDC.remove("method")
+                MDC.remove("path")
+            }
+            on(CallFailed) { _, _ ->
+                MDC.remove("correlation_id")
+                MDC.remove("method")
+                MDC.remove("path")
+            }
+        }
+    )
+
     install(ContentNegotiation) {
         json(Json {
             prettyPrint = false
@@ -157,6 +184,15 @@ fun Application.module() {
     install(StatusPages) {
         exception<SecurityPluginException> { call, cause ->
             call.respond(cause.status, ErrorResponse(cause.code))
+        }
+        exception<BadRequestException> { call, cause ->
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.code))
+        }
+        exception<ConflictException> { call, cause ->
+            call.respond(HttpStatusCode.Conflict, ErrorResponse(cause.code))
+        }
+        exception<DependencyUnavailableException> { call, cause ->
+            call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse(cause.code))
         }
         exception<Throwable> { call, cause ->
             this@module.environment.log.error("Unhandled server error", cause)
@@ -411,7 +447,7 @@ fun Application.module() {
     }
 
     routing {
-        healthRoutes(appConfig.grpcPort, traceabilityService)
+        healthRoutes(appConfig.grpcPort, traceabilityService, dataSource)
         telemetryRoutes(
             telemetrySnapshotService = telemetrySnapshotService,
             telemetryEventStore = telemetryEventStore,
