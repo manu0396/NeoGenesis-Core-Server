@@ -17,6 +17,7 @@ data class AppConfig(
     val resilience: ResilienceConfig,
     val control: ControlConfig,
     val serverless: ServerlessConfig,
+    val demoModeEnabled: Boolean,
     val compliance: ComplianceConfig =
         ComplianceConfig(
             enabled = false,
@@ -737,6 +738,11 @@ data class AppConfig(
                             ?: false,
                 )
 
+            val demoModeEnabled =
+                env("NG_DEMO_MODE")?.equals("true", ignoreCase = true)
+                    ?: config.bool("neogenesis.demo.mode")
+                    ?: false
+
             val billingConfig =
                 BillingConfig(
                     enabled =
@@ -810,6 +816,7 @@ data class AppConfig(
                 resilience = resilienceConfig,
                 control = controlConfig,
                 serverless = serverlessConfig,
+                demoModeEnabled = demoModeEnabled,
                 compliance = complianceConfig,
                 billing = billingConfig,
                 commercial =

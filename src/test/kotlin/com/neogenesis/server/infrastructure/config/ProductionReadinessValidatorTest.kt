@@ -277,6 +277,7 @@ class ProductionReadinessValidatorTest {
                     latencyBudgetMs = 50,
                 ),
             serverless = serverless,
+            demoModeEnabled = false,
             billing = billing,
         )
     }

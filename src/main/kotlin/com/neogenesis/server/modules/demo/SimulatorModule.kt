@@ -29,12 +29,13 @@ fun Route.simulatorModule(
     regenOpsService: RegenOpsService,
     regenOpsStore: RegenOpsStore,
     complianceEnabled: Boolean,
+    demoModeEnabled: Boolean,
     driftThreshold: Double = 0.2,
 ) {
     authenticate("auth-jwt") {
         post("/demo/simulator/runs") {
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR)
-            if (complianceEnabled) {
+            if (complianceEnabled && !demoModeEnabled) {
                 throw ApiException(
                     "compliance_mode_enabled",
                     "Simulator publishing is disabled when COMPLIANCE_MODE=true",

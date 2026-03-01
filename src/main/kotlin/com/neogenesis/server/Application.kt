@@ -95,6 +95,7 @@ import com.neogenesis.server.modules.commercial.CommercialRepository
 import com.neogenesis.server.modules.commercial.CommercialService
 import com.neogenesis.server.modules.commercial.commercialModule
 import com.neogenesis.server.modules.connectors.connectorCertificationModule
+import com.neogenesis.server.modules.demo.demoUiModule
 import com.neogenesis.server.modules.demo.simulatorModule
 import com.neogenesis.server.modules.devicesModule
 import com.neogenesis.server.modules.evidence.auditBundleModule
@@ -685,7 +686,14 @@ fun Application.module() {
             regenOpsService = regenOpsService,
             regenOpsStore = regenOpsStore,
             complianceEnabled = appConfig.compliance.enabled,
+            demoModeEnabled = appConfig.demoModeEnabled,
         )
+        if (appConfig.demoModeEnabled) {
+            demoUiModule(
+                regenOpsService = regenOpsService,
+                regenOpsStore = regenOpsStore,
+            )
+        }
         if (appConfig.evidencePack.enabled) {
             evidencePackModule(
                 jobRepository = jobRepository,
