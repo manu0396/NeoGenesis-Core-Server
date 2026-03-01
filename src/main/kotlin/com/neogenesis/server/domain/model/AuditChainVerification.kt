@@ -7,5 +7,5 @@ data class AuditChainVerification(
     val valid: Boolean,
     val checkedEvents: Int,
     val failureIndex: Int?,
-    val failureReason: String?
+    val failureReason: String?,
 )

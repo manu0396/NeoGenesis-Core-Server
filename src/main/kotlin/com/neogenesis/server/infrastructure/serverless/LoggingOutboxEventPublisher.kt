@@ -16,7 +16,7 @@ class LoggingOutboxEventPublisher : OutboxEventPublisher {
             event.id,
             event.eventType,
             event.partitionKey,
-            event.attempts
+            event.attempts,
         )
         return PublishResult.Success
     }

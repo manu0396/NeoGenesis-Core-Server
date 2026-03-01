@@ -7,7 +7,7 @@ data class RetinalLayerSpec(
     val layerName: String,
     val thicknessMicrons: Float,
     val targetCellDensity: Int,
-    val bioInkViscosityIndex: Float
+    val bioInkViscosityIndex: Float,
 )
 
 @Serializable
@@ -20,7 +20,7 @@ data class RetinalControlConstraints(
     val maxMorphologicalDefectProbability: Float,
     val maxNirIiTempCelsius: Float,
     val targetBioInkPh: Float,
-    val phTolerance: Float
+    val phTolerance: Float,
 )
 
 @Serializable
@@ -31,5 +31,5 @@ data class RetinalPrintPlan(
     val blueprintVersion: String,
     val layers: List<RetinalLayerSpec>,
     val constraints: RetinalControlConstraints,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = System.currentTimeMillis(),
 )

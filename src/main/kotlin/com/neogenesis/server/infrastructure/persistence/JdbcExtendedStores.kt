@@ -28,28 +28,29 @@ private val extendedJson = Json { ignoreUnknownKeys = true }
 class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStore {
     override fun save(plan: RetinalPrintPlan) {
         dataSource.connection.use { connection ->
-            val updated = connection.prepareStatement(
-                """
-                UPDATE retinal_print_plans
-                SET
-                    patient_id = ?,
-                    source_document_id = ?,
-                    blueprint_version = ?,
-                    layers_json = ?,
-                    constraints_json = ?,
-                    created_at = ?
-                WHERE plan_id = ?
-                """.trimIndent()
-            ).use { statement ->
-                statement.setString(1, plan.patientId)
-                statement.setString(2, plan.sourceDocumentId)
-                statement.setString(3, plan.blueprintVersion)
-                statement.setString(4, encodeLayers(plan.layers))
-                statement.setString(5, encodeConstraints(plan.constraints))
-                statement.setTimestamp(6, Timestamp.from(Instant.ofEpochMilli(plan.createdAtMs)))
-                statement.setString(7, plan.planId)
-                statement.executeUpdate()
-            }
+            val updated =
+                connection.prepareStatement(
+                    """
+                    UPDATE retinal_print_plans
+                    SET
+                        patient_id = ?,
+                        source_document_id = ?,
+                        blueprint_version = ?,
+                        layers_json = ?,
+                        constraints_json = ?,
+                        created_at = ?
+                    WHERE plan_id = ?
+                    """.trimIndent(),
+                ).use { statement ->
+                    statement.setString(1, plan.patientId)
+                    statement.setString(2, plan.sourceDocumentId)
+                    statement.setString(3, plan.blueprintVersion)
+                    statement.setString(4, encodeLayers(plan.layers))
+                    statement.setString(5, encodeConstraints(plan.constraints))
+                    statement.setTimestamp(6, Timestamp.from(Instant.ofEpochMilli(plan.createdAtMs)))
+                    statement.setString(7, plan.planId)
+                    statement.executeUpdate()
+                }
 
             if (updated == 0) {
                 connection.prepareStatement(
@@ -63,7 +64,7 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                         constraints_json,
                         created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """.trimIndent()
+                    """.trimIndent(),
                 ).use { statement ->
                     statement.setString(1, plan.planId)
                     statement.setString(2, plan.patientId)
@@ -92,7 +93,7 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                     created_at
                 FROM retinal_print_plans
                 WHERE plan_id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, planId)
                 statement.executeQuery().use { rs ->
@@ -118,7 +119,7 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                 WHERE patient_id = ?
                 ORDER BY created_at DESC
                 LIMIT 1
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, patientId)
                 statement.executeQuery().use { rs ->
@@ -143,7 +144,7 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                 FROM retinal_print_plans
                 ORDER BY created_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -172,7 +173,7 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                     created_at,
                     updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, session.sessionId)
                 statement.setString(2, session.printerId)
@@ -186,7 +187,11 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
         }
     }
 
-    override fun updateStatus(sessionId: String, status: PrintSessionStatus, updatedAtMs: Long) {
+    override fun updateStatus(
+        sessionId: String,
+        status: PrintSessionStatus,
+        updatedAtMs: Long,
+    ) {
         dataSource.connection.use { connection ->
             connection.prepareStatement(
                 """
@@ -195,7 +200,7 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                     status = ?,
                     updated_at = ?
                 WHERE session_id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, status.name)
                 statement.setTimestamp(2, Timestamp.from(Instant.ofEpochMilli(updatedAtMs)))
@@ -219,7 +224,7 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                     updated_at
                 FROM print_sessions
                 WHERE session_id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, sessionId)
                 statement.executeQuery().use { rs ->
@@ -246,7 +251,7 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                   AND status = 'ACTIVE'
                 ORDER BY updated_at DESC
                 LIMIT 1
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, printerId)
                 statement.executeQuery().use { rs ->
@@ -272,7 +277,7 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                 WHERE status = 'ACTIVE'
                 ORDER BY updated_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -299,7 +304,7 @@ class JdbcLatencyBreachStore(private val dataSource: DataSource) : LatencyBreach
                     threshold_ms,
                     created_at
                 ) VALUES (?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, event.printerId)
                 statement.setString(2, event.source)
@@ -324,7 +329,7 @@ class JdbcLatencyBreachStore(private val dataSource: DataSource) : LatencyBreach
                 FROM latency_budget_breaches
                 ORDER BY created_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -336,8 +341,8 @@ class JdbcLatencyBreachStore(private val dataSource: DataSource) : LatencyBreach
                                     source = rs.getString("source"),
                                     durationMs = rs.getDouble("duration_ms"),
                                     thresholdMs = rs.getLong("threshold_ms"),
-                                    createdAtMs = rs.getTimestamp("created_at").time
-                                )
+                                    createdAtMs = rs.getTimestamp("created_at").time,
+                                ),
                             )
                         }
                     }
@@ -348,7 +353,11 @@ class JdbcLatencyBreachStore(private val dataSource: DataSource) : LatencyBreach
 }
 
 class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
-    override fun enqueue(eventType: String, partitionKey: String, payloadJson: String) {
+    override fun enqueue(
+        eventType: String,
+        partitionKey: String,
+        payloadJson: String,
+    ) {
         dataSource.connection.use { connection ->
             connection.prepareStatement(
                 """
@@ -364,7 +373,7 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
                     created_at,
                     processed_at
                 ) VALUES (?, ?, ?, 'PENDING', 0, ?, ?, ?, ?, ?)
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 val now = Timestamp.from(Instant.now())
                 statement.setString(1, eventType)
@@ -401,7 +410,7 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
                   AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
                 ORDER BY id ASC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -415,7 +424,10 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
         }
     }
 
-    override fun claimPending(limit: Int, processingTtlMs: Long): List<ServerlessOutboxEvent> {
+    override fun claimPending(
+        limit: Int,
+        processingTtlMs: Long,
+    ): List<ServerlessOutboxEvent> {
         if (limit <= 0) {
             return emptyList()
         }
@@ -440,7 +452,7 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
                     next_attempt_at = NULL,
                     last_error = NULL
                 WHERE id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setTimestamp(1, Timestamp.from(Instant.now()))
                 statement.setLong(2, eventId)
@@ -449,7 +461,11 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
         }
     }
 
-    override fun scheduleRetry(eventId: Long, nextAttemptAtMs: Long, failureReason: String) {
+    override fun scheduleRetry(
+        eventId: Long,
+        nextAttemptAtMs: Long,
+        failureReason: String,
+    ) {
         dataSource.connection.use { connection ->
             connection.prepareStatement(
                 """
@@ -462,7 +478,7 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
                     last_error = ?,
                     processed_at = NULL
                 WHERE id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setTimestamp(1, Timestamp.from(Instant.ofEpochMilli(nextAttemptAtMs)))
                 statement.setString(2, failureReason.take(2048))
@@ -472,7 +488,10 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
         }
     }
 
-    override fun moveToDeadLetter(eventId: Long, failureReason: String) {
+    override fun moveToDeadLetter(
+        eventId: Long,
+        failureReason: String,
+    ) {
         dataSource.connection.use { connection ->
             val now = Timestamp.from(Instant.now())
 
@@ -499,7 +518,7 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
                     ?
                 FROM integration_outbox
                 WHERE id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, failureReason.take(2048))
                 statement.setTimestamp(2, now)
@@ -518,7 +537,7 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
                     next_attempt_at = NULL,
                     last_error = ?
                 WHERE id = ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setTimestamp(1, now)
                 statement.setString(2, failureReason.take(2048))
@@ -545,7 +564,7 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
                 FROM integration_outbox_dead_letter
                 ORDER BY failed_at DESC
                 LIMIT ?
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 statement.setInt(1, limit)
                 statement.executeQuery().use { rs ->
@@ -563,38 +582,39 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
         return dataSource.connection.use { connection ->
             connection.autoCommit = false
             try {
-                val moved = connection.prepareStatement(
-                    """
-                    INSERT INTO integration_outbox(
-                        event_type,
-                        partition_key,
-                        payload_json,
-                        status,
-                        attempts,
-                        next_attempt_at,
-                        processing_started_at,
-                        last_error,
-                        created_at,
-                        processed_at
-                    )
-                    SELECT
-                        event_type,
-                        partition_key,
-                        payload_json,
-                        'PENDING',
-                        0,
-                        CURRENT_TIMESTAMP,
-                        NULL,
-                        NULL,
-                        CURRENT_TIMESTAMP,
-                        NULL
-                    FROM integration_outbox_dead_letter
-                    WHERE id = ?
-                    """.trimIndent()
-                ).use { statement ->
-                    statement.setLong(1, deadLetterId)
-                    statement.executeUpdate()
-                }
+                val moved =
+                    connection.prepareStatement(
+                        """
+                        INSERT INTO integration_outbox(
+                            event_type,
+                            partition_key,
+                            payload_json,
+                            status,
+                            attempts,
+                            next_attempt_at,
+                            processing_started_at,
+                            last_error,
+                            created_at,
+                            processed_at
+                        )
+                        SELECT
+                            event_type,
+                            partition_key,
+                            payload_json,
+                            'PENDING',
+                            0,
+                            CURRENT_TIMESTAMP,
+                            NULL,
+                            NULL,
+                            CURRENT_TIMESTAMP,
+                            NULL
+                        FROM integration_outbox_dead_letter
+                        WHERE id = ?
+                        """.trimIndent(),
+                    ).use { statement ->
+                        statement.setLong(1, deadLetterId)
+                        statement.executeUpdate()
+                    }
                 if (moved == 0) {
                     connection.rollback()
                     return false
@@ -604,7 +624,7 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
                     """
                     DELETE FROM integration_outbox_dead_letter
                     WHERE id = ?
-                    """.trimIndent()
+                    """.trimIndent(),
                 ).use { statement ->
                     statement.setLong(1, deadLetterId)
                     statement.executeUpdate()
@@ -623,32 +643,33 @@ class JdbcOutboxEventStore(val dataSource: DataSource) : OutboxEventStore {
 
 private fun JdbcOutboxEventStore.claimPendingWithSkipLocked(
     limit: Int,
-    processingTtlMs: Long
+    processingTtlMs: Long,
 ): List<ServerlessOutboxEvent> {
     return dataSource.connection.use { connection ->
         connection.autoCommit = false
         try {
             releaseExpiredClaims(connection, processingTtlMs)
-            val ids = connection.prepareStatement(
-                """
-                SELECT id
-                FROM integration_outbox
-                WHERE status = 'PENDING'
-                  AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
-                ORDER BY id ASC
-                LIMIT ?
-                FOR UPDATE SKIP LOCKED
-                """.trimIndent()
-            ).use { statement ->
-                statement.setInt(1, limit)
-                statement.executeQuery().use { rs ->
-                    buildList {
-                        while (rs.next()) {
-                            add(rs.getLong("id"))
+            val ids =
+                connection.prepareStatement(
+                    """
+                    SELECT id
+                    FROM integration_outbox
+                    WHERE status = 'PENDING'
+                      AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
+                    ORDER BY id ASC
+                    LIMIT ?
+                    FOR UPDATE SKIP LOCKED
+                    """.trimIndent(),
+                ).use { statement ->
+                    statement.setInt(1, limit)
+                    statement.executeQuery().use { rs ->
+                        buildList {
+                            while (rs.next()) {
+                                add(rs.getLong("id"))
+                            }
                         }
                     }
                 }
-            }
 
             if (ids.isEmpty()) {
                 connection.commit()
@@ -663,7 +684,7 @@ private fun JdbcOutboxEventStore.claimPendingWithSkipLocked(
                     processing_started_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                   AND status = 'PENDING'
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 ids.forEach { id ->
                     statement.setLong(1, id)
@@ -686,31 +707,32 @@ private fun JdbcOutboxEventStore.claimPendingWithSkipLocked(
 
 private fun JdbcOutboxEventStore.claimPendingWithOptimisticClaim(
     limit: Int,
-    processingTtlMs: Long
+    processingTtlMs: Long,
 ): List<ServerlessOutboxEvent> {
     return dataSource.connection.use { connection ->
         connection.autoCommit = false
         try {
             releaseExpiredClaims(connection, processingTtlMs)
-            val candidates = connection.prepareStatement(
-                """
-                SELECT id
-                FROM integration_outbox
-                WHERE status = 'PENDING'
-                  AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
-                ORDER BY id ASC
-                LIMIT ?
-                """.trimIndent()
-            ).use { statement ->
-                statement.setInt(1, limit)
-                statement.executeQuery().use { rs ->
-                    buildList {
-                        while (rs.next()) {
-                            add(rs.getLong("id"))
+            val candidates =
+                connection.prepareStatement(
+                    """
+                    SELECT id
+                    FROM integration_outbox
+                    WHERE status = 'PENDING'
+                      AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
+                    ORDER BY id ASC
+                    LIMIT ?
+                    """.trimIndent(),
+                ).use { statement ->
+                    statement.setInt(1, limit)
+                    statement.executeQuery().use { rs ->
+                        buildList {
+                            while (rs.next()) {
+                                add(rs.getLong("id"))
+                            }
                         }
                     }
                 }
-            }
 
             val claimed = mutableListOf<Long>()
             connection.prepareStatement(
@@ -721,7 +743,7 @@ private fun JdbcOutboxEventStore.claimPendingWithOptimisticClaim(
                     processing_started_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                   AND status = 'PENDING'
-                """.trimIndent()
+                """.trimIndent(),
             ).use { statement ->
                 candidates.forEach { id ->
                     statement.setLong(1, id)
@@ -746,7 +768,7 @@ private fun JdbcOutboxEventStore.claimPendingWithOptimisticClaim(
 
 private fun JdbcOutboxEventStore.releaseExpiredClaims(
     connection: java.sql.Connection,
-    processingTtlMs: Long
+    processingTtlMs: Long,
 ) {
     val ttlMs = processingTtlMs.coerceAtLeast(60_000L)
     val cutoff = Timestamp.from(Instant.ofEpochMilli(System.currentTimeMillis() - ttlMs))
@@ -759,7 +781,7 @@ private fun JdbcOutboxEventStore.releaseExpiredClaims(
         WHERE status = 'PROCESSING'
           AND processing_started_at IS NOT NULL
           AND processing_started_at < ?
-        """.trimIndent()
+        """.trimIndent(),
     ).use { statement ->
         statement.setTimestamp(1, cutoff)
         statement.executeUpdate()
@@ -768,7 +790,7 @@ private fun JdbcOutboxEventStore.releaseExpiredClaims(
 
 private fun JdbcOutboxEventStore.selectOutboxEventsByIds(
     connection: java.sql.Connection,
-    ids: List<Long>
+    ids: List<Long>,
 ): List<ServerlessOutboxEvent> {
     if (ids.isEmpty()) {
         return emptyList()
@@ -792,7 +814,7 @@ private fun JdbcOutboxEventStore.selectOutboxEventsByIds(
         WHERE id IN ($placeholders)
           AND status = 'PROCESSING'
         ORDER BY id ASC
-        """.trimIndent()
+        """.trimIndent(),
     ).use { statement ->
         ids.forEachIndexed { index, id ->
             statement.setLong(index + 1, id)
@@ -815,7 +837,7 @@ private fun ResultSet.toRetinalPlan(): RetinalPrintPlan {
         blueprintVersion = getString("blueprint_version"),
         layers = decodeLayers(getString("layers_json")),
         constraints = decodeConstraints(getString("constraints_json")),
-        createdAtMs = getTimestamp("created_at").time
+        createdAtMs = getTimestamp("created_at").time,
     )
 }
 
@@ -827,7 +849,7 @@ private fun ResultSet.toPrintSession(): PrintSession {
         patientId = getString("patient_id"),
         status = PrintSessionStatus.valueOf(getString("status")),
         createdAtMs = getTimestamp("created_at").time,
-        updatedAtMs = getTimestamp("updated_at").time
+        updatedAtMs = getTimestamp("updated_at").time,
     )
 }
 
@@ -846,7 +868,7 @@ private fun ResultSet.toOutboxEvent(): ServerlessOutboxEvent {
         processingStartedAtMs = processingStartedAt?.time,
         processedAtMs = processedAt?.time,
         nextAttemptAtMs = nextAttemptAt?.time,
-        lastError = getString("last_error")
+        lastError = getString("last_error"),
     )
 }
 
@@ -860,7 +882,7 @@ private fun ResultSet.toDeadLetterEvent(): DeadLetterOutboxEvent {
         attempts = getInt("attempts"),
         failureReason = getString("failure_reason"),
         createdAtMs = getTimestamp("created_at").time,
-        failedAtMs = getTimestamp("failed_at").time
+        failedAtMs = getTimestamp("failed_at").time,
     )
 }
 
@@ -904,6 +926,6 @@ private fun defaultConstraints(): RetinalControlConstraints {
         maxMorphologicalDefectProbability = 0.12f,
         maxNirIiTempCelsius = 38.5f,
         targetBioInkPh = 7.35f,
-        phTolerance = 0.12f
+        phTolerance = 0.12f,
     )
 }

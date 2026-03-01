@@ -6,7 +6,7 @@ import kotlin.math.pow
 
 data class BioSimulationSnapshot(
     val shearStressKPa: Float,
-    val predictedViability: Float
+    val predictedViability: Float,
 )
 
 /**
@@ -18,18 +18,19 @@ class AdvancedBioSimulationService(
     private val consistencyIndexK: Float = 0.42f,
     private val flowIndexN: Float = 0.68f,
     private val sensitivityK: Float = 0.004f,
-    private val residenceTimeMs: Float = 220.0f
+    private val residenceTimeMs: Float = 220.0f,
 ) {
     fun simulate(telemetry: TelemetryState): BioSimulationSnapshot {
         val tau = calculateShearStress(telemetry)
-        val viability = predictViabilityLoss(
-            currentViability = telemetry.cellViabilityIndex.coerceIn(0.0f, 1.0f),
-            shearStressKPa = tau,
-            residenceTimeMs = residenceTimeMs
-        )
+        val viability =
+            predictViabilityLoss(
+                currentViability = telemetry.cellViabilityIndex.coerceIn(0.0f, 1.0f),
+                shearStressKPa = tau,
+                residenceTimeMs = residenceTimeMs,
+            )
         return BioSimulationSnapshot(
             shearStressKPa = tau,
-            predictedViability = viability
+            predictedViability = viability,
         )
     }
 
@@ -43,7 +44,7 @@ class AdvancedBioSimulationService(
     fun predictViabilityLoss(
         currentViability: Float,
         shearStressKPa: Float,
-        residenceTimeMs: Float
+        residenceTimeMs: Float,
     ): Float {
         if (shearStressKPa < 1.0f) {
             return currentViability

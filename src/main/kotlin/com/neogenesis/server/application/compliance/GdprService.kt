@@ -11,16 +11,22 @@ import com.neogenesis.server.infrastructure.config.AppConfig
 class GdprService(
     private val gdprStore: GdprStore,
     private val auditTrailService: AuditTrailService,
-    private val gdprConfig: AppConfig.GdprConfig
+    private val gdprConfig: AppConfig.GdprConfig,
 ) {
-    fun grantConsent(patientId: String, purpose: String, legalBasis: String, actor: String): GdprConsentRecord {
-        val record = GdprConsentRecord(
-            patientId = patientId,
-            purpose = purpose,
-            status = ConsentStatus.GRANTED,
-            legalBasis = legalBasis,
-            grantedBy = actor
-        )
+    fun grantConsent(
+        patientId: String,
+        purpose: String,
+        legalBasis: String,
+        actor: String,
+    ): GdprConsentRecord {
+        val record =
+            GdprConsentRecord(
+                patientId = patientId,
+                purpose = purpose,
+                status = ConsentStatus.GRANTED,
+                legalBasis = legalBasis,
+                grantedBy = actor,
+            )
         gdprStore.appendConsent(record)
         auditTrailService.record(
             AuditEvent(
@@ -30,20 +36,26 @@ class GdprService(
                 resourceId = patientId,
                 outcome = "success",
                 requirementIds = listOf("REQ-ISO-009", "REQ-ISO-012"),
-                details = mapOf("purpose" to purpose, "legalBasis" to legalBasis)
-            )
+                details = mapOf("purpose" to purpose, "legalBasis" to legalBasis),
+            ),
         )
         return record
     }
 
-    fun revokeConsent(patientId: String, purpose: String, legalBasis: String, actor: String): GdprConsentRecord {
-        val record = GdprConsentRecord(
-            patientId = patientId,
-            purpose = purpose,
-            status = ConsentStatus.REVOKED,
-            legalBasis = legalBasis,
-            grantedBy = actor
-        )
+    fun revokeConsent(
+        patientId: String,
+        purpose: String,
+        legalBasis: String,
+        actor: String,
+    ): GdprConsentRecord {
+        val record =
+            GdprConsentRecord(
+                patientId = patientId,
+                purpose = purpose,
+                status = ConsentStatus.REVOKED,
+                legalBasis = legalBasis,
+                grantedBy = actor,
+            )
         gdprStore.appendConsent(record)
         auditTrailService.record(
             AuditEvent(
@@ -53,13 +65,16 @@ class GdprService(
                 resourceId = patientId,
                 outcome = "success",
                 requirementIds = listOf("REQ-ISO-009", "REQ-ISO-012"),
-                details = mapOf("purpose" to purpose, "legalBasis" to legalBasis)
-            )
+                details = mapOf("purpose" to purpose, "legalBasis" to legalBasis),
+            ),
         )
         return record
     }
 
-    fun hasActiveConsent(patientId: String, purpose: String): Boolean {
+    fun hasActiveConsent(
+        patientId: String,
+        purpose: String,
+    ): Boolean {
         if (!gdprConfig.enforceConsent) {
             return true
         }
@@ -67,15 +82,20 @@ class GdprService(
         return latest.status == ConsentStatus.GRANTED
     }
 
-    fun recordErasure(patientId: String, reason: String, actor: String): GdprErasureRecord {
+    fun recordErasure(
+        patientId: String,
+        reason: String,
+        actor: String,
+    ): GdprErasureRecord {
         val affected = gdprStore.anonymizeClinicalDocuments(patientId)
-        val record = GdprErasureRecord(
-            patientId = patientId,
-            requestedBy = actor,
-            reason = reason,
-            outcome = "success",
-            affectedRows = affected
-        )
+        val record =
+            GdprErasureRecord(
+                patientId = patientId,
+                requestedBy = actor,
+                reason = reason,
+                outcome = "success",
+                affectedRows = affected,
+            )
         gdprStore.appendErasure(record)
         auditTrailService.record(
             AuditEvent(
@@ -85,8 +105,8 @@ class GdprService(
                 resourceId = patientId,
                 outcome = "success",
                 requirementIds = listOf("REQ-ISO-009", "REQ-ISO-012"),
-                details = mapOf("reason" to reason, "affectedRows" to affected.toString())
-            )
+                details = mapOf("reason" to reason, "affectedRows" to affected.toString()),
+            ),
         )
         return record
     }
@@ -103,8 +123,8 @@ class GdprService(
                 resourceId = null,
                 outcome = "success",
                 requirementIds = listOf("REQ-ISO-012"),
-                details = mapOf("affectedRows" to affected.toString())
-            )
+                details = mapOf("affectedRows" to affected.toString()),
+            ),
         )
         return affected
     }

@@ -10,24 +10,25 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
 class DigitalTwinServiceTest {
-
     @Test
     fun `updates digital twin snapshot`() {
         val service = DigitalTwinService(FakeTwinStore())
 
-        val telemetry = TelemetryState(
-            printerId = "printer-01",
-            timestampMs = 1_700_000_000,
-            nozzleTempCelsius = 37.1f,
-            extrusionPressureKPa = 117.0f,
-            cellViabilityIndex = 0.95f
-        )
-        val command = ControlCommand(
-            commandId = "cmd-1",
-            printerId = "printer-01",
-            actionType = ControlActionType.MAINTAIN,
-            reason = "ok"
-        )
+        val telemetry =
+            TelemetryState(
+                printerId = "printer-01",
+                timestampMs = 1_700_000_000,
+                nozzleTempCelsius = 37.1f,
+                extrusionPressureKPa = 117.0f,
+                cellViabilityIndex = 0.95f,
+            )
+        val command =
+            ControlCommand(
+                commandId = "cmd-1",
+                printerId = "printer-01",
+                actionType = ControlActionType.MAINTAIN,
+                reason = "ok",
+            )
 
         val updated = service.updateFromTelemetry(telemetry, command)
 

@@ -3,9 +3,9 @@
 import com.neogenesis.server.domain.model.TelemetryState
 import com.neogenesis.server.infrastructure.config.AppConfig
 import com.neogenesis.server.infrastructure.security.MqttTlsSocketFactoryBuilder
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.SerialName
 import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
@@ -15,9 +15,8 @@ import java.util.Base64
 class TelemetryMqttAdapter(
     private val config: AppConfig.MqttConfig,
     private val mqttTlsConfig: AppConfig.SecurityConfig.MtlsConfig.MqttMtlsConfig,
-    private val onTelemetry: (TelemetryState) -> Unit
+    private val onTelemetry: (TelemetryState) -> Unit,
 ) : AutoCloseable {
-
     private val logger = LoggerFactory.getLogger(TelemetryMqttAdapter::class.java)
     private val json = Json { ignoreUnknownKeys = true }
     private val client = MqttClient(config.brokerUrl, config.clientId, MemoryPersistence())
@@ -27,22 +26,23 @@ class TelemetryMqttAdapter(
             return
         }
 
-        val options = MqttConnectOptions().apply {
-            isCleanSession = true
-            isAutomaticReconnect = true
-            connectionTimeout = 10
-            keepAliveInterval = 20
+        val options =
+            MqttConnectOptions().apply {
+                isCleanSession = true
+                isAutomaticReconnect = true
+                connectionTimeout = 10
+                keepAliveInterval = 20
 
-            if (!config.username.isNullOrBlank()) {
-                userName = config.username
+                if (!config.username.isNullOrBlank()) {
+                    userName = config.username
+                }
+                if (!config.password.isNullOrBlank()) {
+                    password = config.password.toCharArray()
+                }
+                if (mqttTlsConfig.enabled) {
+                    socketFactory = MqttTlsSocketFactoryBuilder.build(mqttTlsConfig)
+                }
             }
-            if (!config.password.isNullOrBlank()) {
-                password = config.password.toCharArray()
-            }
-            if (mqttTlsConfig.enabled) {
-                socketFactory = MqttTlsSocketFactoryBuilder.build(mqttTlsConfig)
-            }
-        }
 
         client.connect(options)
     }
@@ -55,15 +55,19 @@ class TelemetryMqttAdapter(
         }
     }
 
-    private fun handleTelemetry(defaultPrinterId: String, payload: ByteArray) {
+    private fun handleTelemetry(
+        defaultPrinterId: String,
+        payload: ByteArray,
+    ) {
         runCatching {
             val raw = payload.toString(Charsets.UTF_8)
             val parsed = json.decodeFromString(MqttTelemetryPayload.serializer(), raw)
             val printerId = parsed.printerId.ifBlank { defaultPrinterId }
-            val encryptedBytes = parsed.encryptedImageMatrixBase64
-                ?.takeIf { it.isNotBlank() }
-                ?.let { Base64.getDecoder().decode(it) }
-                ?: byteArrayOf()
+            val encryptedBytes =
+                parsed.encryptedImageMatrixBase64
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { Base64.getDecoder().decode(it) }
+                    ?: byteArrayOf()
 
             TelemetryState(
                 printerId = printerId,
@@ -77,7 +81,7 @@ class TelemetryMqttAdapter(
                 nirIiTempCelsius = parsed.nirIiTempCelsius,
                 morphologicalDefectProbability = parsed.morphologicalDefectProbability,
                 printJobId = parsed.printJobId,
-                tissueType = parsed.tissueType
+                tissueType = parsed.tissueType,
             )
         }.onSuccess { telemetry ->
             runCatching { onTelemetry(telemetry) }
@@ -122,5 +126,5 @@ private data class MqttTelemetryPayload(
     @SerialName("print_job_id")
     val printJobId: String = "",
     @SerialName("tissue_type")
-    val tissueType: String = "retina"
+    val tissueType: String = "retina",
 )

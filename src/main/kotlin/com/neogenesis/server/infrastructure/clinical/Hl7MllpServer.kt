@@ -14,9 +14,8 @@ class Hl7MllpServer(
     private val host: String,
     private val port: Int,
     private val maxFrameBytes: Int,
-    private val onMessage: (String) -> String
+    private val onMessage: (String) -> String,
 ) : AutoCloseable {
-
     private val logger = LoggerFactory.getLogger(Hl7MllpServer::class.java)
     private val running = AtomicBoolean(false)
     private val workerPool: ExecutorService = Executors.newCachedThreadPool()
@@ -50,11 +49,12 @@ class Hl7MllpServer(
             val output = client.getOutputStream()
             while (running.get()) {
                 val frame = readFrame(input = input) ?: break
-                val response = runCatching { onMessage(frame) }
-                    .getOrElse { error ->
-                        logger.error("HL7 MLLP frame processing failed", error)
-                        buildNack(frame, error.message ?: "processing_error")
-                    }
+                val response =
+                    runCatching { onMessage(frame) }
+                        .getOrElse { error ->
+                            logger.error("HL7 MLLP frame processing failed", error)
+                            buildNack(frame, error.message ?: "processing_error")
+                        }
                 sendFrame(output = output, payload = response)
             }
         }
@@ -87,7 +87,10 @@ class Hl7MllpServer(
         return buffer.toString(StandardCharsets.UTF_8)
     }
 
-    private fun sendFrame(output: java.io.OutputStream, payload: String) {
+    private fun sendFrame(
+        output: java.io.OutputStream,
+        payload: String,
+    ) {
         output.write(START_BLOCK.toInt())
         output.write(payload.toByteArray(StandardCharsets.UTF_8))
         output.write(END_BLOCK.toInt())
@@ -95,19 +98,24 @@ class Hl7MllpServer(
         output.flush()
     }
 
-    private fun buildNack(message: String, error: String): String {
+    private fun buildNack(
+        message: String,
+        error: String,
+    ): String {
         val controlId = extractControlId(message)
-        val timestamp = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
-            .format(java.time.LocalDateTime.now())
+        val timestamp =
+            java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
+                .format(java.time.LocalDateTime.now())
         return "MSH|^~\\&|NeoGenesisCore|NeoGenesis|Unknown|Unknown|$timestamp||ACK|${java.util.UUID.randomUUID()}|P|2.5\r" +
             "MSA|AE|$controlId|$error\r"
     }
 
     private fun extractControlId(message: String): String {
-        val msh = message.split('\r', '\n')
-            .firstOrNull { it.startsWith("MSH|") }
-            ?.split('|')
-            .orEmpty()
+        val msh =
+            message.split('\r', '\n')
+                .firstOrNull { it.startsWith("MSH|") }
+                ?.split('|')
+                .orEmpty()
         return msh.getOrNull(9) ?: "UNKNOWN"
     }
 

@@ -4,6 +4,7 @@
 
 # 1. Gradle - Sistema de Construcción
 .gradle/
+.gradle-user/
 build/
 # (Opcional) Ignorar el directorio de configuración local de Gradle si existe
 gradle-local.properties

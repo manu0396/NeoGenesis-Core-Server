@@ -9,30 +9,34 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 
 data class DicomWebStudyMetadata(
     val studyInstanceUid: String,
-    val metadataJson: String
+    val metadataJson: String,
 )
 
 class DicomWebClient(
-    private val config: AppConfig.ClinicalConfig.DicomWebConfig
+    private val config: AppConfig.ClinicalConfig.DicomWebConfig,
 ) {
-    private val httpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofMillis(config.timeoutMs))
-        .build()
+    private val httpClient =
+        HttpClient.newBuilder()
+            .connectTimeout(Duration.ofMillis(config.timeoutMs))
+            .build()
     private val json = Json { ignoreUnknownKeys = true }
 
     fun isEnabled(): Boolean = config.enabled && !config.baseUrl.isNullOrBlank()
 
-    fun queryStudies(patientId: String, limit: Int = 5): String {
+    fun queryStudies(
+        patientId: String,
+        limit: Int = 5,
+    ): String {
         require(isEnabled()) { "DICOMweb integration is disabled or misconfigured" }
         val encodedPatient = URLEncoder.encode(patientId, StandardCharsets.UTF_8)
         val uri = URI.create("${config.baseUrl!!.trimEnd('/')}/studies?PatientID=$encodedPatient&limit=$limit")
@@ -50,10 +54,11 @@ class DicomWebClient(
     }
 
     private fun get(uri: URI): String {
-        val requestBuilder = HttpRequest.newBuilder(uri)
-            .GET()
-            .timeout(Duration.ofMillis(config.timeoutMs))
-            .header("Accept", "application/dicom+json, application/json")
+        val requestBuilder =
+            HttpRequest.newBuilder(uri)
+                .GET()
+                .timeout(Duration.ofMillis(config.timeoutMs))
+                .header("Accept", "application/dicom+json, application/json")
         if (!config.bearerToken.isNullOrBlank()) {
             requestBuilder.header("Authorization", "Bearer ${config.bearerToken}")
         }
@@ -65,12 +70,13 @@ class DicomWebClient(
     }
 
     private fun extractStudyInstanceUid(study: JsonObject): String? {
-        val standardTag = study["0020000D"]
-            ?.jsonObject
-            ?.get("Value")
-            ?.jsonArray
-            ?.firstOrNull()
-            ?.let { asString(it) }
+        val standardTag =
+            study["0020000D"]
+                ?.jsonObject
+                ?.get("Value")
+                ?.jsonArray
+                ?.firstOrNull()
+                ?.let { asString(it) }
         if (!standardTag.isNullOrBlank()) {
             return standardTag
         }

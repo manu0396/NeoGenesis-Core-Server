@@ -5,7 +5,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 interface TelemetrySnapshotService {
     fun update(telemetry: TelemetryState)
+
     fun findByPrinterId(printerId: String): TelemetryState?
+
     fun findAll(): List<TelemetryState>
 }
 

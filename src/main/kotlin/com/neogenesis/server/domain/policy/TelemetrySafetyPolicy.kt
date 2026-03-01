@@ -10,7 +10,6 @@ interface TelemetrySafetyPolicy {
 }
 
 class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
-
     override fun decide(telemetry: TelemetryState): ControlCommand {
         if (
             telemetry.isCriticalViability() ||
@@ -24,21 +23,23 @@ class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
                 commandId = commandId(),
                 printerId = telemetry.printerId,
                 actionType = ControlActionType.EMERGENCY_HALT,
-                reason = "Critical biofabrication safety threshold reached"
+                reason = "Critical biofabrication safety threshold reached",
             )
         }
 
-        val pressureAdjust = when {
-            telemetry.extrusionPressureKPa < 90.0f -> 6.0f
-            telemetry.extrusionPressureKPa > 140.0f -> -6.0f
-            else -> 0.0f
-        }
+        val pressureAdjust =
+            when {
+                telemetry.extrusionPressureKPa < 90.0f -> 6.0f
+                telemetry.extrusionPressureKPa > 140.0f -> -6.0f
+                else -> 0.0f
+            }
 
-        val speedAdjust = when {
-            telemetry.nozzleTempCelsius < 34.0f -> -0.08f
-            telemetry.nozzleTempCelsius > 39.0f -> 0.08f
-            else -> 0.0f
-        }
+        val speedAdjust =
+            when {
+                telemetry.nozzleTempCelsius < 34.0f -> -0.08f
+                telemetry.nozzleTempCelsius > 39.0f -> 0.08f
+                else -> 0.0f
+            }
 
         if (pressureAdjust != 0.0f || speedAdjust != 0.0f) {
             return ControlCommand(
@@ -47,7 +48,7 @@ class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
                 actionType = ControlActionType.ADJUST,
                 adjustPressure = pressureAdjust,
                 adjustSpeed = speedAdjust,
-                reason = "Applying closed-loop correction"
+                reason = "Applying closed-loop correction",
             )
         }
 
@@ -55,7 +56,7 @@ class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
             commandId = commandId(),
             printerId = telemetry.printerId,
             actionType = ControlActionType.MAINTAIN,
-            reason = "Telemetry is within expected range"
+            reason = "Telemetry is within expected range",
         )
     }
 

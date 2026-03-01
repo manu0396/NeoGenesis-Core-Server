@@ -16,18 +16,18 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class BioPrintGrpcService(
-    private val telemetryProcessingService: TelemetryProcessingService
+    private val telemetryProcessingService: TelemetryProcessingService,
 ) : BioPrintServiceGrpcKt.BioPrintServiceCoroutineImplBase() {
-
     override fun streamTelemetryAndControl(requests: Flow<PrinterTelemetry>): Flow<KinematicCommand> {
         return requests.map { telemetry ->
             try {
                 val state = telemetry.toDomain()
-                val result = telemetryProcessingService.process(
-                    telemetry = state,
-                    source = "grpc",
-                    actor = "grpc-client"
-                )
+                val result =
+                    telemetryProcessingService.process(
+                        telemetry = state,
+                        source = "grpc",
+                        actor = "grpc-client",
+                    )
                 result.command.toGrpc(state)
             } catch (error: Throwable) {
                 throw error.toGrpcStatusException()
@@ -48,17 +48,19 @@ class BioPrintGrpcService(
             nirIiTempCelsius = getNirIiTempCelsius(),
             morphologicalDefectProbability = getMorphologicalDefectProbability(),
             printJobId = getPrintJobId(),
-            tissueType = getTissueType()
+            tissueType = getTissueType(),
         )
     }
 
     private fun ControlCommand.toGrpc(telemetry: TelemetryState): KinematicCommand {
         val targetPressure = telemetry.extrusionPressureKPa + adjustPressure
-        val targetTemp = telemetry.nozzleTempCelsius + when {
-            adjustSpeed > 0f -> 0.4f
-            adjustSpeed < 0f -> -0.4f
-            else -> 0.0f
-        }
+        val targetTemp =
+            telemetry.nozzleTempCelsius +
+                when {
+                    adjustSpeed > 0f -> 0.4f
+                    adjustSpeed < 0f -> -0.4f
+                    else -> 0.0f
+                }
 
         return KinematicCommand.newBuilder()
             .setCommandId(commandId)
@@ -75,21 +77,22 @@ class BioPrintGrpcService(
         if (this is StatusException) {
             return this
         }
-        val status = when (this) {
-            is BadRequestException -> Status.INVALID_ARGUMENT.withDescription(code)
-            is ConflictException -> Status.ALREADY_EXISTS.withDescription(code)
-            is DependencyUnavailableException -> Status.UNAVAILABLE.withDescription(code)
-            is IllegalArgumentException -> Status.INVALID_ARGUMENT.withDescription(message ?: "invalid_argument")
-            is IllegalStateException -> {
-                val normalized = message?.lowercase().orEmpty()
-                if (normalized.contains("timeout") || normalized.contains("circuit breaker")) {
-                    Status.UNAVAILABLE.withDescription("integration_unavailable")
-                } else {
-                    Status.FAILED_PRECONDITION.withDescription(message ?: "failed_precondition")
+        val status =
+            when (this) {
+                is BadRequestException -> Status.INVALID_ARGUMENT.withDescription(code)
+                is ConflictException -> Status.ALREADY_EXISTS.withDescription(code)
+                is DependencyUnavailableException -> Status.UNAVAILABLE.withDescription(code)
+                is IllegalArgumentException -> Status.INVALID_ARGUMENT.withDescription(message ?: "invalid_argument")
+                is IllegalStateException -> {
+                    val normalized = message?.lowercase().orEmpty()
+                    if (normalized.contains("timeout") || normalized.contains("circuit breaker")) {
+                        Status.UNAVAILABLE.withDescription("integration_unavailable")
+                    } else {
+                        Status.FAILED_PRECONDITION.withDescription(message ?: "failed_precondition")
+                    }
                 }
+                else -> Status.INTERNAL.withDescription("internal_server_error")
             }
-            else -> Status.INTERNAL.withDescription("internal_server_error")
-        }
         return status.withCause(this).asException()
     }
 }

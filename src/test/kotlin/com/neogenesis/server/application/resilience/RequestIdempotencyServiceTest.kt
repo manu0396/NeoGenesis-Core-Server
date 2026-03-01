@@ -9,26 +9,26 @@ import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
 class RequestIdempotencyServiceTest {
-
     @Test
     fun `throws conflict when key is reused with different payload`() {
-        val service = RequestIdempotencyService(
-            store = InMemoryRequestIdempotencyStore(),
-            metricsService = OperationalMetricsService(SimpleMeterRegistry()),
-            ttlSeconds = 3600
-        )
+        val service =
+            RequestIdempotencyService(
+                store = InMemoryRequestIdempotencyStore(),
+                metricsService = OperationalMetricsService(SimpleMeterRegistry()),
+                ttlSeconds = 3600,
+            )
 
         service.assertOrRemember(
             operation = "clinical.fhir.ingest",
             idempotencyKey = "idem-1",
-            canonicalPayload = """{"id":"1"}"""
+            canonicalPayload = """{"id":"1"}""",
         )
 
         assertFailsWith<ConflictException> {
             service.assertOrRemember(
                 operation = "clinical.fhir.ingest",
                 idempotencyKey = "idem-1",
-                canonicalPayload = """{"id":"2"}"""
+                canonicalPayload = """{"id":"2"}""",
             )
         }
     }
@@ -40,7 +40,7 @@ class RequestIdempotencyServiceTest {
             operation: String,
             key: String,
             payloadHash: String,
-            ttlSeconds: Long
+            ttlSeconds: Long,
         ): IdempotencyRememberResult {
             val composite = operation to key
             val existing = values[composite]

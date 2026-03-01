@@ -7,7 +7,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 class FhirCohortAnalyticsService(
-    private val documentStore: ClinicalDocumentStore
+    private val documentStore: ClinicalDocumentStore,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 

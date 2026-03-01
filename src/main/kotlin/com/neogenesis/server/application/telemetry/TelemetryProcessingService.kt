@@ -17,7 +17,7 @@ import java.util.UUID
 
 data class TelemetryProcessingResult(
     val command: ControlCommand,
-    val digitalTwinState: DigitalTwinState
+    val digitalTwinState: DigitalTwinState,
 )
 
 class TelemetryProcessingService(
@@ -29,10 +29,13 @@ class TelemetryProcessingService(
     private val digitalTwinService: DigitalTwinService,
     private val auditTrailService: AuditTrailService,
     private val metricsService: OperationalMetricsService,
-    private val latencyBudgetService: LatencyBudgetService
+    private val latencyBudgetService: LatencyBudgetService,
 ) {
-
-    fun process(telemetry: TelemetryState, source: String, actor: String): TelemetryProcessingResult {
+    fun process(
+        telemetry: TelemetryState,
+        source: String,
+        actor: String,
+    ): TelemetryProcessingResult {
         val startedNanos = System.nanoTime()
 
         telemetrySnapshotService.update(telemetry)
@@ -41,25 +44,30 @@ class TelemetryProcessingService(
 
         val baselineCommand = closedLoopControlService.decide(telemetry)
         val simulation = advancedBioSimulationService.simulate(telemetry)
-        val command = if (simulation.predictedViability < 0.82f && baselineCommand.actionType != com.neogenesis.server.domain.model.ControlActionType.EMERGENCY_HALT) {
-            ControlCommand(
-                commandId = "cmd-${UUID.randomUUID()}",
-                printerId = telemetry.printerId,
-                actionType = com.neogenesis.server.domain.model.ControlActionType.EMERGENCY_HALT,
-                reason = "Advanced simulation predicted viability collapse (${simulation.predictedViability})"
-            )
-        } else {
-            baselineCommand
-        }
+        val command =
+            if (
+                simulation.predictedViability < 0.82f &&
+                baselineCommand.actionType != com.neogenesis.server.domain.model.ControlActionType.EMERGENCY_HALT
+            ) {
+                ControlCommand(
+                    commandId = "cmd-${UUID.randomUUID()}",
+                    printerId = telemetry.printerId,
+                    actionType = com.neogenesis.server.domain.model.ControlActionType.EMERGENCY_HALT,
+                    reason = "Advanced simulation predicted viability collapse (${simulation.predictedViability})",
+                )
+            } else {
+                baselineCommand
+            }
         controlCommandStore.append(ControlCommandEvent(command = command))
         metricsService.recordControlDecision(command.actionType.name)
 
-        val twinState = digitalTwinService.updateFromTelemetry(
-            telemetry = telemetry,
-            command = command,
-            simulatedViability = simulation.predictedViability,
-            simulatedShearStressKPa = simulation.shearStressKPa
-        )
+        val twinState =
+            digitalTwinService.updateFromTelemetry(
+                telemetry = telemetry,
+                command = command,
+                simulatedViability = simulation.predictedViability,
+                simulatedShearStressKPa = simulation.shearStressKPa,
+            )
 
         auditTrailService.record(
             AuditEvent(
@@ -69,13 +77,14 @@ class TelemetryProcessingService(
                 resourceId = telemetry.printerId,
                 outcome = "success",
                 requirementIds = listOf("REQ-ISO-002", "REQ-ISO-004", "REQ-ISO-005"),
-                details = mapOf(
-                    "source" to source,
-                    "actionType" to command.actionType.name,
-                    "simulatedShearStressKPa" to simulation.shearStressKPa.toString(),
-                    "simulatedPredictedViability" to simulation.predictedViability.toString()
-                )
-            )
+                details =
+                    mapOf(
+                        "source" to source,
+                        "actionType" to command.actionType.name,
+                        "simulatedShearStressKPa" to simulation.shearStressKPa.toString(),
+                        "simulatedPredictedViability" to simulation.predictedViability.toString(),
+                    ),
+            ),
         )
 
         val durationNanos = System.nanoTime() - startedNanos
@@ -83,12 +92,12 @@ class TelemetryProcessingService(
         latencyBudgetService.recordIfBreached(
             printerId = telemetry.printerId,
             source = source,
-            durationNanos = durationNanos
+            durationNanos = durationNanos,
         )
 
         return TelemetryProcessingResult(
             command = command,
-            digitalTwinState = twinState
+            digitalTwinState = twinState,
         )
     }
 }

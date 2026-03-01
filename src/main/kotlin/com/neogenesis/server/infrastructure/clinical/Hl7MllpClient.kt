@@ -11,7 +11,7 @@ class Hl7MllpClient {
         port: Int,
         message: String,
         connectTimeoutMs: Int,
-        readTimeoutMs: Int
+        readTimeoutMs: Int,
     ): String {
         Socket().use { socket ->
             socket.connect(InetSocketAddress(host, port), connectTimeoutMs)

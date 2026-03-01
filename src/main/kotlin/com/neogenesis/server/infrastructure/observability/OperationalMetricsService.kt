@@ -6,7 +6,7 @@ import io.micrometer.core.instrument.Timer
 import java.util.concurrent.TimeUnit
 
 class OperationalMetricsService(
-    private val meterRegistry: MeterRegistry
+    private val meterRegistry: MeterRegistry,
 ) {
     fun recordTelemetryIngest(source: String) {
         Counter.builder("neogenesis_telemetry_ingest_total")
@@ -39,7 +39,10 @@ class OperationalMetricsService(
             .increment()
     }
 
-    fun recordAuditEvent(action: String, outcome: String) {
+    fun recordAuditEvent(
+        action: String,
+        outcome: String,
+    ) {
         Counter.builder("neogenesis_audit_events_total")
             .description("Total audit events")
             .tag("action", action)
@@ -148,7 +151,10 @@ class OperationalMetricsService(
             .increment()
     }
 
-    fun recordCircuitBreakerEvent(integration: String, event: String) {
+    fun recordCircuitBreakerEvent(
+        integration: String,
+        event: String,
+    ) {
         Counter.builder("neogenesis_integration_circuit_breaker_total")
             .description("Circuit breaker state transitions and events")
             .tag("integration", integration)
@@ -157,7 +163,10 @@ class OperationalMetricsService(
             .increment()
     }
 
-    fun recordIntegrationTimeout(integration: String, operation: String) {
+    fun recordIntegrationTimeout(
+        integration: String,
+        operation: String,
+    ) {
         Counter.builder("neogenesis_integration_timeout_total")
             .description("Integration timeout budget breaches")
             .tag("integration", integration)
@@ -166,7 +175,10 @@ class OperationalMetricsService(
             .increment()
     }
 
-    fun recordIdempotencyDuplicate(operation: String, outcome: String) {
+    fun recordIdempotencyDuplicate(
+        operation: String,
+        outcome: String,
+    ) {
         Counter.builder("neogenesis_idempotency_duplicate_total")
             .description("Idempotency duplicate events")
             .tag("operation", operation)

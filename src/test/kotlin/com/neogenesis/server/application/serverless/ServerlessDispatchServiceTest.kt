@@ -10,20 +10,22 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ServerlessDispatchServiceTest {
-
     @Test
     fun `marks processed when publisher succeeds`() {
-        val store = FakeOutboxEventStore(
-            pending = listOf(
-                event(id = 1, attempts = 0)
+        val store =
+            FakeOutboxEventStore(
+                pending =
+                    listOf(
+                        event(id = 1, attempts = 0),
+                    ),
             )
-        )
-        val service = ServerlessDispatchService(
-            outboxEventStore = store,
-            metricsService = OperationalMetricsService(SimpleMeterRegistry()),
-            outboxEventPublisher = OutboxEventPublisher { PublishResult.Success },
-            retryPolicy = OutboxRetryPolicy(maxRetries = 5, baseBackoffMs = 10, maxBackoffMs = 1000)
-        )
+        val service =
+            ServerlessDispatchService(
+                outboxEventStore = store,
+                metricsService = OperationalMetricsService(SimpleMeterRegistry()),
+                outboxEventPublisher = OutboxEventPublisher { PublishResult.Success },
+                retryPolicy = OutboxRetryPolicy(maxRetries = 5, baseBackoffMs = 10, maxBackoffMs = 1000),
+            )
 
         service.drainPending(10)
 
@@ -34,17 +36,20 @@ class ServerlessDispatchServiceTest {
 
     @Test
     fun `schedules retry when publisher fails and retries remain`() {
-        val store = FakeOutboxEventStore(
-            pending = listOf(
-                event(id = 2, attempts = 1)
+        val store =
+            FakeOutboxEventStore(
+                pending =
+                    listOf(
+                        event(id = 2, attempts = 1),
+                    ),
             )
-        )
-        val service = ServerlessDispatchService(
-            outboxEventStore = store,
-            metricsService = OperationalMetricsService(SimpleMeterRegistry()),
-            outboxEventPublisher = OutboxEventPublisher { PublishResult.RetryableFailure("temporary") },
-            retryPolicy = OutboxRetryPolicy(maxRetries = 5, baseBackoffMs = 10, maxBackoffMs = 1000)
-        )
+        val service =
+            ServerlessDispatchService(
+                outboxEventStore = store,
+                metricsService = OperationalMetricsService(SimpleMeterRegistry()),
+                outboxEventPublisher = OutboxEventPublisher { PublishResult.RetryableFailure("temporary") },
+                retryPolicy = OutboxRetryPolicy(maxRetries = 5, baseBackoffMs = 10, maxBackoffMs = 1000),
+            )
 
         service.drainPending(10)
 
@@ -55,17 +60,20 @@ class ServerlessDispatchServiceTest {
 
     @Test
     fun `moves to dead letter when retries exhausted`() {
-        val store = FakeOutboxEventStore(
-            pending = listOf(
-                event(id = 3, attempts = 4)
+        val store =
+            FakeOutboxEventStore(
+                pending =
+                    listOf(
+                        event(id = 3, attempts = 4),
+                    ),
             )
-        )
-        val service = ServerlessDispatchService(
-            outboxEventStore = store,
-            metricsService = OperationalMetricsService(SimpleMeterRegistry()),
-            outboxEventPublisher = OutboxEventPublisher { PublishResult.RetryableFailure("still failing") },
-            retryPolicy = OutboxRetryPolicy(maxRetries = 5, baseBackoffMs = 10, maxBackoffMs = 1000)
-        )
+        val service =
+            ServerlessDispatchService(
+                outboxEventStore = store,
+                metricsService = OperationalMetricsService(SimpleMeterRegistry()),
+                outboxEventPublisher = OutboxEventPublisher { PublishResult.RetryableFailure("still failing") },
+                retryPolicy = OutboxRetryPolicy(maxRetries = 5, baseBackoffMs = 10, maxBackoffMs = 1000),
+            )
 
         service.drainPending(10)
 
@@ -74,7 +82,10 @@ class ServerlessDispatchServiceTest {
         assertEquals(listOf(3L), store.deadLettered.map { it.first })
     }
 
-    private fun event(id: Long, attempts: Int): ServerlessOutboxEvent {
+    private fun event(
+        id: Long,
+        attempts: Int,
+    ): ServerlessOutboxEvent {
         return ServerlessOutboxEvent(
             id = id,
             eventType = "DICOM_INGESTED",
@@ -86,31 +97,46 @@ class ServerlessDispatchServiceTest {
             processingStartedAtMs = null,
             processedAtMs = null,
             nextAttemptAtMs = System.currentTimeMillis(),
-            lastError = null
+            lastError = null,
         )
     }
 
     private class FakeOutboxEventStore(
-        private val pending: List<ServerlessOutboxEvent>
+        private val pending: List<ServerlessOutboxEvent>,
     ) : OutboxEventStore {
         val processed = mutableListOf<Long>()
         val retried = mutableListOf<Triple<Long, Long, String>>()
         val deadLettered = mutableListOf<Pair<Long, String>>()
 
-        override fun enqueue(eventType: String, partitionKey: String, payloadJson: String) = Unit
+        override fun enqueue(
+            eventType: String,
+            partitionKey: String,
+            payloadJson: String,
+        ) = Unit
 
         override fun pending(limit: Int): List<ServerlessOutboxEvent> = pending.take(limit)
-        override fun claimPending(limit: Int, processingTtlMs: Long): List<ServerlessOutboxEvent> = pending.take(limit)
+
+        override fun claimPending(
+            limit: Int,
+            processingTtlMs: Long,
+        ): List<ServerlessOutboxEvent> = pending.take(limit)
 
         override fun markProcessed(eventId: Long) {
             processed += eventId
         }
 
-        override fun scheduleRetry(eventId: Long, nextAttemptAtMs: Long, failureReason: String) {
+        override fun scheduleRetry(
+            eventId: Long,
+            nextAttemptAtMs: Long,
+            failureReason: String,
+        ) {
             retried += Triple(eventId, nextAttemptAtMs, failureReason)
         }
 
-        override fun moveToDeadLetter(eventId: Long, failureReason: String) {
+        override fun moveToDeadLetter(
+            eventId: Long,
+            failureReason: String,
+        ) {
             deadLettered += eventId to failureReason
         }
 

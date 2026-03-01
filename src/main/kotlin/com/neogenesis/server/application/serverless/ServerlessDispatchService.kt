@@ -9,7 +9,9 @@ import kotlin.random.Random
 
 sealed interface PublishResult {
     data object Success : PublishResult
+
     data class RetryableFailure(val reason: String) : PublishResult
+
     data class FatalFailure(val reason: String) : PublishResult
 }
 
@@ -20,18 +22,22 @@ fun interface OutboxEventPublisher {
 data class OutboxRetryPolicy(
     val maxRetries: Int,
     val baseBackoffMs: Long,
-    val maxBackoffMs: Long
+    val maxBackoffMs: Long,
 )
 
 class ServerlessDispatchService(
     private val outboxEventStore: OutboxEventStore,
     private val metricsService: OperationalMetricsService,
     private val outboxEventPublisher: OutboxEventPublisher,
-    private val retryPolicy: OutboxRetryPolicy
+    private val retryPolicy: OutboxRetryPolicy,
 ) {
     private val claimTtlMs = 5 * 60 * 1000L
 
-    fun enqueue(eventType: String, partitionKey: String, payloadJson: String) {
+    fun enqueue(
+        eventType: String,
+        partitionKey: String,
+        payloadJson: String,
+    ) {
         outboxEventStore.enqueue(eventType, partitionKey, payloadJson)
         metricsService.recordOutboxEvent(eventType)
     }
@@ -61,8 +67,9 @@ class ServerlessDispatchService(
 
         var processed = 0
         events.forEach { event ->
-            val result = runCatching { outboxEventPublisher.publish(event) }
-                .getOrElse { PublishResult.RetryableFailure(it.message ?: "publish exception") }
+            val result =
+                runCatching { outboxEventPublisher.publish(event) }
+                    .getOrElse { PublishResult.RetryableFailure(it.message ?: "publish exception") }
 
             when (result) {
                 PublishResult.Success -> {
@@ -80,7 +87,7 @@ class ServerlessDispatchService(
                         outboxEventStore.scheduleRetry(
                             eventId = event.id,
                             nextAttemptAtMs = System.currentTimeMillis() + backoff,
-                            failureReason = result.reason
+                            failureReason = result.reason,
                         )
                         metricsService.recordOutboxRetry(event.eventType)
                     }

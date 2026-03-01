@@ -13,7 +13,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
 class RetinalPlanningServiceTest {
-
     @Test
     fun `creates retina plan from dicom metadata`() {
         val store = FakeRetinalPlanStore()
@@ -22,12 +21,13 @@ class RetinalPlanningServiceTest {
         val auditService = AuditTrailService(auditStore, metrics)
         val service = RetinalPlanningService(store, auditService, metrics)
 
-        val plan = service.createPlanFromDicom(
-            patientId = "patient-1",
-            sourceDocumentId = "dicom-1",
-            metadata = mapOf("layerCount" to "8", "retinalThicknessMicrons" to "300"),
-            actor = "tester"
-        )
+        val plan =
+            service.createPlanFromDicom(
+                patientId = "patient-1",
+                sourceDocumentId = "dicom-1",
+                metadata = mapOf("layerCount" to "8", "retinalThicknessMicrons" to "300"),
+                actor = "tester",
+            )
 
         assertEquals("patient-1", plan.patientId)
         assertEquals(8, plan.layers.size)
@@ -46,12 +46,12 @@ class RetinalPlanningServiceTest {
         override fun findLatestByPatientId(patientId: String): RetinalPrintPlan? =
             data.values.filter { it.patientId == patientId }.maxByOrNull { it.createdAtMs }
 
-        override fun findRecent(limit: Int): List<RetinalPrintPlan> =
-            data.values.sortedByDescending { it.createdAtMs }.take(limit)
+        override fun findRecent(limit: Int): List<RetinalPrintPlan> = data.values.sortedByDescending { it.createdAtMs }.take(limit)
     }
 
     private class FakeAuditStore : AuditEventStore {
         private val events = mutableListOf<AuditEvent>()
+
         override fun append(event: AuditEvent) {
             events += event
         }
@@ -63,7 +63,7 @@ class RetinalPlanningServiceTest {
                 valid = true,
                 checkedEvents = events.size.coerceAtMost(limit),
                 failureIndex = null,
-                failureReason = null
+                failureReason = null,
             )
         }
     }

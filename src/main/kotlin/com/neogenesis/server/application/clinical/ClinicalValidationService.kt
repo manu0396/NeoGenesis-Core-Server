@@ -10,11 +10,11 @@ import kotlinx.serialization.json.jsonPrimitive
 data class ClinicalValidationResult(
     val valid: Boolean,
     val errors: List<String>,
-    val warnings: List<String>
+    val warnings: List<String>,
 )
 
 class ClinicalValidationService(
-    private val config: AppConfig.ClinicalConfig.ValidationConfig
+    private val config: AppConfig.ClinicalConfig.ValidationConfig,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -22,14 +22,15 @@ class ClinicalValidationService(
         val errors = mutableListOf<String>()
         val warnings = mutableListOf<String>()
 
-        val root = runCatching { json.parseToJsonElement(rawJson).jsonObject }
-            .getOrElse {
-                return ClinicalValidationResult(
-                    valid = false,
-                    errors = listOf("FHIR payload is not valid JSON"),
-                    warnings = emptyList()
-                )
-            }
+        val root =
+            runCatching { json.parseToJsonElement(rawJson).jsonObject }
+                .getOrElse {
+                    return ClinicalValidationResult(
+                        valid = false,
+                        errors = listOf("FHIR payload is not valid JSON"),
+                        warnings = emptyList(),
+                    )
+                }
 
         val resourceType = root["resourceType"]?.jsonPrimitive?.content
         if (resourceType.isNullOrBlank()) {
@@ -41,10 +42,11 @@ class ClinicalValidationService(
             errors += "FHIR versionId '$fhirVersion' is not allowed"
         }
 
-        val profiles = root["meta"]?.jsonObject?.get("profile")?.jsonArray
-            ?.mapNotNull { runCatching { it.jsonPrimitive.content }.getOrNull() }
-            ?.toSet()
-            .orEmpty()
+        val profiles =
+            root["meta"]?.jsonObject?.get("profile")?.jsonArray
+                ?.mapNotNull { runCatching { it.jsonPrimitive.content }.getOrNull() }
+                ?.toSet()
+                .orEmpty()
         if (config.requiredFhirProfiles.isNotEmpty() && profiles.intersect(config.requiredFhirProfiles).isEmpty()) {
             errors += "FHIR profile mismatch. Required one of: ${config.requiredFhirProfiles.joinToString(",")}"
         }
@@ -75,7 +77,7 @@ class ClinicalValidationService(
         return ClinicalValidationResult(
             valid = errors.isEmpty(),
             errors = errors,
-            warnings = warnings
+            warnings = warnings,
         )
     }
 
@@ -89,7 +91,7 @@ class ClinicalValidationService(
             return ClinicalValidationResult(
                 valid = false,
                 errors = listOf("HL7 message must contain MSH segment"),
-                warnings = emptyList()
+                warnings = emptyList(),
             )
         }
 
@@ -137,7 +139,7 @@ class ClinicalValidationService(
         return ClinicalValidationResult(
             valid = errors.isEmpty(),
             errors = errors,
-            warnings = warnings
+            warnings = warnings,
         )
     }
 
@@ -155,7 +157,10 @@ class ClinicalValidationService(
         }
     }
 
-    private fun collectTerminologySystems(element: JsonElement, systems: MutableSet<String>) {
+    private fun collectTerminologySystems(
+        element: JsonElement,
+        systems: MutableSet<String>,
+    ) {
         when {
             element is kotlinx.serialization.json.JsonObject -> {
                 val possibleSystem = element["system"]?.jsonPrimitive?.content

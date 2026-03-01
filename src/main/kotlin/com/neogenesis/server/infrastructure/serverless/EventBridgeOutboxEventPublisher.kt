@@ -15,32 +15,34 @@ class EventBridgeOutboxEventPublisher(
     private val eventBusName: String,
     private val sourceNamespace: String,
     region: String,
-    endpointOverride: String?
+    endpointOverride: String?,
 ) : OutboxEventPublisher, AutoCloseable {
-
-    private val client: EventBridgeClient = EventBridgeClient.builder()
-        .region(Region.of(region))
-        .apply {
-            if (!endpointOverride.isNullOrBlank()) {
-                endpointOverride(URI.create(endpointOverride))
+    private val client: EventBridgeClient =
+        EventBridgeClient.builder()
+            .region(Region.of(region))
+            .apply {
+                if (!endpointOverride.isNullOrBlank()) {
+                    endpointOverride(URI.create(endpointOverride))
+                }
             }
-        }
-        .build()
+            .build()
 
     override fun publish(event: ServerlessOutboxEvent): PublishResult {
         return try {
-            val entry = PutEventsRequestEntry.builder()
-                .eventBusName(eventBusName)
-                .source(sourceNamespace)
-                .detailType(event.eventType)
-                .detail(event.payloadJson)
-                .build()
-
-            val response = client.putEvents(
-                PutEventsRequest.builder()
-                    .entries(entry)
+            val entry =
+                PutEventsRequestEntry.builder()
+                    .eventBusName(eventBusName)
+                    .source(sourceNamespace)
+                    .detailType(event.eventType)
+                    .detail(event.payloadJson)
                     .build()
-            )
+
+            val response =
+                client.putEvents(
+                    PutEventsRequest.builder()
+                        .entries(entry)
+                        .build(),
+                )
             if (response.failedEntryCount() > 0) {
                 val failed = response.entries().firstOrNull()
                 val code = failed?.errorCode().orEmpty()

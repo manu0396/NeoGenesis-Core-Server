@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 enum class ClinicalDocumentType {
     DICOM,
     HL7,
-    FHIR
+    FHIR,
 }
 
 @Serializable
@@ -16,5 +16,5 @@ data class ClinicalDocument(
     val patientId: String?,
     val content: String,
     val metadata: Map<String, String>,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = System.currentTimeMillis(),
 )

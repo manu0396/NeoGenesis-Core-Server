@@ -1,4 +1,8 @@
+@file:Suppress("ktlint:standard:no-wildcard-imports")
+
 import com.google.protobuf.gradle.*
+import java.io.File
+import org.cyclonedx.gradle.CycloneDxTask
 val ktorVersion = "3.0.3"
 val grpcVersion = "1.62.2"
 val grpcKotlinVersion = "1.4.1"
@@ -12,12 +16,16 @@ val hikariVersion = "5.1.0"
 val otelVersion = "1.43.0"
 val nettyVersion = "4.1.124.Final"
 val postgresqlVersion = "42.7.7"
+val stripeVersion = "25.5.0"
 
 plugins {
     kotlin("jvm") version "2.0.21"
     id("io.ktor.plugin") version "3.0.3"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
     id("com.google.protobuf") version "0.9.4"
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
+    id("io.gitlab.arturbosch.detekt") version "1.23.7"
+    id("org.cyclonedx.bom") version "1.8.2"
 }
 
 group = "com.neogenesis"
@@ -39,7 +47,9 @@ dependencies {
     implementation("io.ktor:ktor-server-call-logging-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-call-id-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-content-negotiation-jvm:$ktorVersion")
+    implementation("io.ktor:ktor-server-default-headers-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-status-pages-jvm:$ktorVersion")
+    implementation("io.ktor:ktor-server-cors-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-auth-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-auth-jwt-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-metrics-micrometer-jvm:$ktorVersion")
@@ -49,9 +59,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     implementation("com.auth0:java-jwt:4.4.0")
     implementation("com.auth0:jwks-rsa:0.22.1")
+    implementation("org.mindrot:jbcrypt:0.4")
     implementation("io.opentelemetry:opentelemetry-api:$otelVersion")
     implementation("io.opentelemetry:opentelemetry-sdk:$otelVersion")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp:$otelVersion")
+    implementation("com.stripe:stripe-java:$stripeVersion")
 
     implementation("io.grpc:grpc-kotlin-stub:$grpcKotlinVersion")
     implementation("io.grpc:grpc-protobuf:$grpcVersion")
@@ -75,6 +87,7 @@ dependencies {
 
     implementation("io.micrometer:micrometer-registry-prometheus:$micrometerVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
+    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host-jvm:$ktorVersion")
@@ -98,7 +111,13 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
+}
+
+java {
+    toolchain {
+        languageVersion.set(org.gradle.jvm.toolchain.JavaLanguageVersion.of(21))
+    }
 }
 
 tasks.test {
@@ -117,40 +136,43 @@ tasks.register("traceabilityGate") {
             throw GradleException("Missing requirement-test evidence map: ${evidenceFile.path}")
         }
 
-        val requirements = traceabilityFile.readLines()
-            .drop(1)
-            .filter { it.isNotBlank() }
-            .map { it.substringBefore(',').trim() }
-            .toSet()
+        val requirements =
+            traceabilityFile.readLines()
+                .drop(1)
+                .filter { it.isNotBlank() }
+                .map { it.substringBefore(',').trim() }
+                .toSet()
 
-        val evidenceRows = evidenceFile.readLines()
-            .drop(1)
-            .filter { it.isNotBlank() }
-            .map { line ->
-                val tokens = line.split(',').map { it.trim() }
-                if (tokens.size < 5) {
-                    throw GradleException("Invalid evidence row: $line")
+        val evidenceRows =
+            evidenceFile.readLines()
+                .drop(1)
+                .filter { it.isNotBlank() }
+                .map { line ->
+                    val tokens = line.split(',').map { it.trim() }
+                    if (tokens.size < 5) {
+                        throw GradleException("Invalid evidence row: $line")
+                    }
+                    tokens
                 }
-                tokens
-            }
         val evidenceByRequirement = evidenceRows.groupBy { it[0] }
         val missingEvidence = requirements.filter { !evidenceByRequirement.containsKey(it) }
         if (missingEvidence.isNotEmpty()) {
             throw GradleException("Traceability gate failed. Missing evidence for requirements: $missingEvidence")
         }
 
-        val missingAutomatedTests = evidenceRows
-            .filter { it[1].equals("automated", ignoreCase = true) }
-            .mapNotNull { row ->
-                val className = row[2]
-                val simpleName = className.substringAfterLast('.')
-                val exists = fileTree("src/test/kotlin").files.any { it.nameWithoutExtension == simpleName }
-                if (exists) null else className
-            }
-            .distinct()
+        val missingAutomatedTests =
+            evidenceRows
+                .filter { it[1].equals("automated", ignoreCase = true) }
+                .mapNotNull { row ->
+                    val className = row[2]
+                    val simpleName = className.substringAfterLast('.')
+                    val exists = fileTree("src/test/kotlin").files.any { it.nameWithoutExtension == simpleName }
+                    if (exists) null else className
+                }
+                .distinct()
         if (missingAutomatedTests.isNotEmpty()) {
             throw GradleException(
-                "Traceability gate failed. Missing automated test classes referenced in evidence: $missingAutomatedTests"
+                "Traceability gate failed. Missing automated test classes referenced in evidence: $missingAutomatedTests",
             )
         }
 
@@ -164,7 +186,32 @@ tasks.register("traceabilityGate") {
 }
 
 tasks.named("check") {
-    dependsOn("traceabilityGate")
+    dependsOn("traceabilityGate", "ktlintCheck", "detekt")
+}
+
+ktlint {
+    version.set("1.2.1")
+    filter {
+        exclude("**/build/**")
+        exclude("**/generated/**")
+        exclude("**\\build\\**")
+        exclude("**\\generated\\**")
+        exclude { it.file.path.contains("${File.separator}build${File.separator}generated${File.separator}") }
+    }
+}
+
+detekt {
+    buildUponDefaultConfig = false
+    allRules = false
+    config.setFrom(files("config/detekt/detekt.yml"))
+}
+
+tasks.named<CycloneDxTask>("cyclonedxBom") {
+    includeConfigs = listOf("runtimeClasspath")
+    skipConfigs = listOf("testRuntimeClasspath")
+    projectType = "application"
+    outputName = "sbom"
+    outputFormat = "json"
 }
 
 protobuf {

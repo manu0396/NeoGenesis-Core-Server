@@ -40,18 +40,18 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class GrpcTelemetryIntegrationTest {
-
     @Test
     fun `rejects grpc telemetry stream without bearer token`() {
         val fixture = fixture()
         try {
-            val exception = assertFailsWith<StatusException> {
-                runBlocking {
-                    fixture.stubWithToken(null)
-                        .streamTelemetryAndControl(flowOf(sampleTelemetry()))
-                        .first()
+            val exception =
+                assertFailsWith<StatusException> {
+                    runBlocking {
+                        fixture.stubWithToken(null)
+                            .streamTelemetryAndControl(flowOf(sampleTelemetry()))
+                            .first()
+                    }
                 }
-            }
 
             assertEquals(io.grpc.Status.Code.UNAUTHENTICATED, exception.status.code)
         } finally {
@@ -63,11 +63,12 @@ class GrpcTelemetryIntegrationTest {
     fun `persists telemetry and command over grpc stream with authorized role`() {
         val fixture = fixture()
         try {
-            val command = runBlocking {
-                fixture.stubWithToken(fixture.issueToken(listOf("controller")))
-                    .streamTelemetryAndControl(flowOf(sampleTelemetry()))
-                    .first()
-            }
+            val command =
+                runBlocking {
+                    fixture.stubWithToken(fixture.issueToken(listOf("controller")))
+                        .streamTelemetryAndControl(flowOf(sampleTelemetry()))
+                        .first()
+                }
 
             assertTrue(command.commandId.isNotBlank())
             assertTrue(command.actionType.isNotBlank())
@@ -83,69 +84,83 @@ class GrpcTelemetryIntegrationTest {
     }
 
     private fun fixture(): TestFixture {
-        val dataSource = DatabaseFactory(
-            AppConfig.DatabaseConfig(
-                jdbcUrl = "jdbc:h2:mem:neogenesis-grpc-integration-${System.nanoTime()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-                username = "sa",
-                password = "",
-                maximumPoolSize = 4,
-                migrateOnStartup = true
-            )
-        ).initialize()
+        val dataSource =
+            DatabaseFactory(
+                AppConfig.DatabaseConfig(
+                    jdbcUrl =
+                        "jdbc:h2:mem:neogenesis-grpc-integration-${System.nanoTime()};" +
+                            "MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                    username = "sa",
+                    password = "",
+                    maximumPoolSize = 4,
+                    migrateOnStartup = true,
+                    connectionTimeoutMs = 3_000,
+                    validationTimeoutMs = 1_000,
+                    idleTimeoutMs = 600_000,
+                    maxLifetimeMs = 1_800_000,
+                ),
+            ).initialize()
 
         val meterRegistry = SimpleMeterRegistry()
         val metricsService = OperationalMetricsService(meterRegistry)
         val auditTrailService = AuditTrailService(JdbcAuditEventStore(dataSource), metricsService)
         val telemetryEventStore = JdbcTelemetryEventStore(dataSource)
         val commandStore = JdbcControlCommandStore(dataSource)
-        val telemetryProcessingService = TelemetryProcessingService(
-            closedLoopControlService = ClosedLoopControlService(
-                decisionService = ControlDecisionService(DefaultTelemetrySafetyPolicy()),
-                printSessionStore = JdbcPrintSessionStore(dataSource),
-                retinalPlanStore = JdbcRetinalPlanStore(dataSource)
-            ),
-            advancedBioSimulationService = AdvancedBioSimulationService(),
-            telemetrySnapshotService = InMemoryTelemetrySnapshotService(),
-            telemetryEventStore = telemetryEventStore,
-            controlCommandStore = commandStore,
-            digitalTwinService = DigitalTwinService(JdbcDigitalTwinStore(dataSource)),
-            auditTrailService = auditTrailService,
-            metricsService = metricsService,
-            latencyBudgetService = LatencyBudgetService(
-                thresholdMs = 50,
-                latencyBreachStore = JdbcLatencyBreachStore(dataSource),
+        val telemetryProcessingService =
+            TelemetryProcessingService(
+                closedLoopControlService =
+                    ClosedLoopControlService(
+                        decisionService = ControlDecisionService(DefaultTelemetrySafetyPolicy()),
+                        printSessionStore = JdbcPrintSessionStore(dataSource),
+                        retinalPlanStore = JdbcRetinalPlanStore(dataSource),
+                    ),
+                advancedBioSimulationService = AdvancedBioSimulationService(),
+                telemetrySnapshotService = InMemoryTelemetrySnapshotService(),
+                telemetryEventStore = telemetryEventStore,
+                controlCommandStore = commandStore,
+                digitalTwinService = DigitalTwinService(JdbcDigitalTwinStore(dataSource)),
                 auditTrailService = auditTrailService,
-                metricsService = metricsService
+                metricsService = metricsService,
+                latencyBudgetService =
+                    LatencyBudgetService(
+                        thresholdMs = 50,
+                        latencyBreachStore = JdbcLatencyBreachStore(dataSource),
+                        auditTrailService = auditTrailService,
+                        metricsService = metricsService,
+                    ),
             )
-        )
 
-        val verifier = JWT.require(Algorithm.HMAC256(TEST_SECRET))
-            .withIssuer(TEST_ISSUER)
-            .withAudience(TEST_AUDIENCE)
-            .build()
+        val verifier =
+            JWT.require(Algorithm.HMAC256(TEST_SECRET))
+                .withIssuer(TEST_ISSUER)
+                .withAudience(TEST_AUDIENCE)
+                .build()
 
-        val serviceDefinition = io.grpc.ServerInterceptors.intercept(
-            BioPrintGrpcService(telemetryProcessingService).bindService(),
-            GrpcJwtAuthInterceptor(verifier)
-        )
+        val serviceDefinition =
+            io.grpc.ServerInterceptors.intercept(
+                BioPrintGrpcService(telemetryProcessingService).bindService(),
+                GrpcJwtAuthInterceptor(verifier),
+            )
 
         val serverName = InProcessServerBuilder.generateName()
-        val server = InProcessServerBuilder.forName(serverName)
-            .directExecutor()
-            .addService(serviceDefinition)
-            .addService(ProtoReflectionService.newInstance())
-            .build()
-            .start()
-        val channel = InProcessChannelBuilder.forName(serverName)
-            .directExecutor()
-            .build()
+        val server =
+            InProcessServerBuilder.forName(serverName)
+                .directExecutor()
+                .addService(serviceDefinition)
+                .addService(ProtoReflectionService.newInstance())
+                .build()
+                .start()
+        val channel =
+            InProcessChannelBuilder.forName(serverName)
+                .directExecutor()
+                .build()
 
         return TestFixture(
             dataSource = dataSource,
             server = server,
             channel = channel,
             telemetryEventStore = telemetryEventStore,
-            commandStore = commandStore
+            commandStore = commandStore,
         )
     }
 
@@ -170,9 +185,8 @@ class GrpcTelemetryIntegrationTest {
         private val server: io.grpc.Server,
         private val channel: io.grpc.ManagedChannel,
         val telemetryEventStore: JdbcTelemetryEventStore,
-        val commandStore: JdbcControlCommandStore
+        val commandStore: JdbcControlCommandStore,
     ) : AutoCloseable {
-
         fun issueToken(roles: List<String>): String {
             return JWT.create()
                 .withIssuer(TEST_ISSUER)
@@ -186,9 +200,10 @@ class GrpcTelemetryIntegrationTest {
             if (token.isNullOrBlank()) {
                 return BioPrintServiceGrpcKt.BioPrintServiceCoroutineStub(channel)
             }
-            val metadata = Metadata().apply {
-                put(AUTHORIZATION_HEADER, "Bearer $token")
-            }
+            val metadata =
+                Metadata().apply {
+                    put(AUTHORIZATION_HEADER, "Bearer $token")
+                }
             val intercepted = ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(metadata))
             return BioPrintServiceGrpcKt.BioPrintServiceCoroutineStub(intercepted)
         }

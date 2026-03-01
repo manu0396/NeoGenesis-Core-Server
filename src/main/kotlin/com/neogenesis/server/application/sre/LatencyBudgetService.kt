@@ -10,21 +10,25 @@ class LatencyBudgetService(
     private val thresholdMs: Long,
     private val latencyBreachStore: LatencyBreachStore,
     private val auditTrailService: AuditTrailService,
-    private val metricsService: OperationalMetricsService
+    private val metricsService: OperationalMetricsService,
 ) {
-
-    fun recordIfBreached(printerId: String, source: String, durationNanos: Long) {
+    fun recordIfBreached(
+        printerId: String,
+        source: String,
+        durationNanos: Long,
+    ) {
         val durationMs = durationNanos / 1_000_000.0
         if (durationMs <= thresholdMs) {
             return
         }
 
-        val event = LatencyBreachEvent(
-            printerId = printerId,
-            source = source,
-            durationMs = durationMs,
-            thresholdMs = thresholdMs
-        )
+        val event =
+            LatencyBreachEvent(
+                printerId = printerId,
+                source = source,
+                durationMs = durationMs,
+                thresholdMs = thresholdMs,
+            )
         latencyBreachStore.append(event)
         metricsService.recordLatencyBudgetBreach(source)
 
@@ -36,12 +40,13 @@ class LatencyBudgetService(
                 resourceId = printerId,
                 outcome = "warning",
                 requirementIds = listOf("REQ-ISO-006"),
-                details = mapOf(
-                    "source" to source,
-                    "durationMs" to "%.3f".format(durationMs),
-                    "thresholdMs" to thresholdMs.toString()
-                )
-            )
+                details =
+                    mapOf(
+                        "source" to source,
+                        "durationMs" to "%.3f".format(durationMs),
+                        "thresholdMs" to thresholdMs.toString(),
+                    ),
+            ),
         )
     }
 

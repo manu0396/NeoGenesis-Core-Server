@@ -8,5 +8,5 @@ data class LatencyBreachEvent(
     val source: String,
     val durationMs: Double,
     val thresholdMs: Long,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = System.currentTimeMillis(),
 )

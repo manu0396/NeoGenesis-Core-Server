@@ -5,7 +5,7 @@ import com.neogenesis.server.domain.model.TelemetryState
 import com.neogenesis.server.domain.policy.TelemetrySafetyPolicy
 
 class ControlDecisionService(
-    private val safetyPolicy: TelemetrySafetyPolicy
+    private val safetyPolicy: TelemetrySafetyPolicy,
 ) {
     fun evaluate(telemetry: TelemetryState): ControlCommand {
         return safetyPolicy.decide(telemetry)

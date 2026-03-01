@@ -16,24 +16,26 @@ import java.time.Duration
 import java.util.Base64
 
 class SecretResolver(
-    private val config: AppConfig.SecretsConfig
+    private val config: AppConfig.SecretsConfig,
 ) {
-    private val client: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofMillis(config.vaultTimeoutMs))
-        .build()
+    private val client: HttpClient =
+        HttpClient.newBuilder()
+            .connectTimeout(Duration.ofMillis(config.vaultTimeoutMs))
+            .build()
     private val json = Json { ignoreUnknownKeys = true }
-    private val kmsClient: KmsClient? = if (config.kmsEnabled) {
-        val builder = KmsClient.builder()
-        if (!config.kmsRegion.isNullOrBlank()) {
-            builder.region(Region.of(config.kmsRegion))
+    private val kmsClient: KmsClient? =
+        if (config.kmsEnabled) {
+            val builder = KmsClient.builder()
+            if (!config.kmsRegion.isNullOrBlank()) {
+                builder.region(Region.of(config.kmsRegion))
+            }
+            if (!config.kmsEndpointOverride.isNullOrBlank()) {
+                builder.endpointOverride(URI.create(config.kmsEndpointOverride))
+            }
+            builder.build()
+        } else {
+            null
         }
-        if (!config.kmsEndpointOverride.isNullOrBlank()) {
-            builder.endpointOverride(URI.create(config.kmsEndpointOverride))
-        }
-        builder.build()
-    } else {
-        null
-    }
 
     fun resolve(refOrValue: String?): String? {
         if (refOrValue.isNullOrBlank()) {
@@ -64,19 +66,21 @@ class SecretResolver(
         require(path.isNotBlank()) { "Vault path must not be empty." }
 
         val uri = URI.create("${config.vaultAddress.trimEnd('/')}/v1/${config.vaultMount.trim('/')}/data/$path")
-        val request = HttpRequest.newBuilder(uri)
-            .GET()
-            .timeout(Duration.ofMillis(config.vaultTimeoutMs))
-            .header("X-Vault-Token", config.vaultToken)
-            .build()
+        val request =
+            HttpRequest.newBuilder(uri)
+                .GET()
+                .timeout(Duration.ofMillis(config.vaultTimeoutMs))
+                .header("X-Vault-Token", config.vaultToken)
+                .build()
         val response = client.send(request, HttpResponse.BodyHandlers.ofString())
         if (response.statusCode() !in 200..299) {
             error("Vault secret resolution failed with status=${response.statusCode()} path=$path")
         }
 
         val root = json.parseToJsonElement(response.body()).jsonObject
-        val data = root["data"]?.jsonObject?.get("data")?.jsonObject
-            ?: error("Invalid Vault KV response shape for path=$path")
+        val data =
+            root["data"]?.jsonObject?.get("data")?.jsonObject
+                ?: error("Invalid Vault KV response shape for path=$path")
         return data[field]?.jsonPrimitive?.content
     }
 
@@ -85,13 +89,15 @@ class SecretResolver(
         val kms = requireNotNull(kmsClient) { "KMS client is not initialized." }
         require(cipherTextB64.isNotBlank()) { "KMS ciphertext reference is empty." }
 
-        val cipherBytes = runCatching { Base64.getDecoder().decode(cipherTextB64) }
-            .getOrElse { error("KMS ciphertext must be Base64") }
-        val response = kms.decrypt(
-            DecryptRequest.builder()
-                .ciphertextBlob(SdkBytes.fromByteArray(cipherBytes))
-                .build()
-        )
+        val cipherBytes =
+            runCatching { Base64.getDecoder().decode(cipherTextB64) }
+                .getOrElse { error("KMS ciphertext must be Base64") }
+        val response =
+            kms.decrypt(
+                DecryptRequest.builder()
+                    .ciphertextBlob(SdkBytes.fromByteArray(cipherBytes))
+                    .build(),
+            )
         return response.plaintext()?.asUtf8String()
     }
 }
