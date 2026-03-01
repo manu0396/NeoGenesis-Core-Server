@@ -4,6 +4,7 @@ import com.neogenesis.gateway.connector.Capability
 import com.neogenesis.gateway.connector.Driver
 import com.neogenesis.gateway.connector.DriverContext
 import com.neogenesis.gateway.connector.DriverHealth
+import com.neogenesis.gateway.connector.ExampleConnectorDriver
 import com.neogenesis.gateway.connector.SandboxedDriver
 import com.neogenesis.gateway.connector.TelemetryEvent
 import com.neogenesis.gateway.connector.TelemetryField
@@ -11,6 +12,10 @@ import com.neogenesis.gateway.connector.TelemetrySchema
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Instant
 import java.util.UUID
 import kotlin.math.roundToLong
@@ -23,6 +28,7 @@ data class CertificationConfig(
     val reconnectDelayMs: Long,
     val timeoutMs: Long,
     val outputDir: String,
+    val driverId: String,
 )
 
 data class CertificationReport(
@@ -35,6 +41,7 @@ data class CertificationReport(
     val reconnectLatencyMs: Long,
     val status: String,
     val generatedAt: Instant,
+    val driverId: String,
 )
 
 data class LatencyStats(
@@ -46,6 +53,7 @@ fun main(args: Array<String>) {
     val config = parseArgs(args)
     val report = runBlocking { runCertification(config) }
     writeReport(config.outputDir, report)
+    submitReportIfConfigured(report)
     println("Connector certification report written to ${config.outputDir}")
 }
 
@@ -57,6 +65,7 @@ private fun parseArgs(args: Array<String>): CertificationConfig {
     val reconnectDelayMs = argValue("--reconnectDelayMs=")?.toLongOrNull() ?: 250L
     val timeoutMs = argValue("--timeoutMs=")?.toLongOrNull() ?: 1_000L
     val outputDir = argValue("--output=") ?: "build/reports/connector-certification"
+    val driverId = argValue("--driver=") ?: "simulated-driver"
     return CertificationConfig(
         events = events,
         dropRate = dropRate,
@@ -64,13 +73,15 @@ private fun parseArgs(args: Array<String>): CertificationConfig {
         reconnectDelayMs = reconnectDelayMs,
         timeoutMs = timeoutMs,
         outputDir = outputDir,
+        driverId = driverId,
     )
 }
 
 private suspend fun runCertification(config: CertificationConfig): CertificationReport {
+    val driverInstance = createDriver(config.driverId, config.dropRate)
     val driver =
         SandboxedDriver(
-            delegate = SimulatedDriver(dropRate = config.dropRate),
+            delegate = driverInstance,
             timeoutMs = config.timeoutMs,
         )
     val context =
@@ -125,6 +136,7 @@ private suspend fun runCertification(config: CertificationConfig): Certification
         reconnectLatencyMs = reconnectLatencyMs,
         status = status,
         generatedAt = Instant.now(),
+        driverId = config.driverId,
     )
 }
 
@@ -151,10 +163,58 @@ private fun writeReport(outputDir: String, report: CertificationReport) {
     File(dir, "certification-report.md").writeText(report.toMarkdown())
 }
 
+private fun submitReportIfConfigured(report: CertificationReport) {
+    val serverUrl = System.getenv("CERTIFICATION_SERVER_URL")?.trim().orEmpty()
+    if (serverUrl.isBlank()) {
+        return
+    }
+    val tenantId = System.getenv("CERTIFICATION_TENANT_ID")?.trim().orEmpty().ifBlank { "certification-tenant" }
+    val correlationId = System.getenv("CERTIFICATION_CORRELATION_ID")?.trim().orEmpty().ifBlank {
+        UUID.randomUUID().toString()
+    }
+    val authToken = System.getenv("CERTIFICATION_AUTH_TOKEN")?.trim().orEmpty()
+    val connectorVersion = System.getenv("CERTIFICATION_CONNECTOR_VERSION")?.trim().orEmpty()
+
+    val payload = buildJsonPayload(report, tenantId, correlationId, connectorVersion)
+    val requestBuilder =
+        HttpRequest.newBuilder()
+            .uri(URI.create(serverUrl))
+            .header("Content-Type", "application/json")
+            .header("X-Correlation-Id", correlationId)
+            .POST(HttpRequest.BodyPublishers.ofString(payload))
+    if (authToken.isNotBlank()) {
+        requestBuilder.header("Authorization", "Bearer $authToken")
+    }
+    val request = requestBuilder.build()
+    val client = HttpClient.newHttpClient()
+    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+    if (response.statusCode() >= 300) {
+        println("Connector certification submission failed: ${response.statusCode()} ${response.body()}")
+    }
+}
+
+private fun buildJsonPayload(
+    report: CertificationReport,
+    tenantId: String,
+    correlationId: String,
+    connectorVersion: String,
+): String {
+    val version = if (connectorVersion.isBlank()) "unknown" else connectorVersion
+    return """
+        {
+          "tenantId": "$tenantId",
+          "correlationId": "$correlationId",
+          "connectorId": "${report.connectorId}",
+          "connectorVersion": "$version"
+        }
+    """.trimIndent()
+}
+
 private fun CertificationReport.toJson(): String {
     return """
         {
           "connectorId": "$connectorId",
+          "driverId": "$driverId",
           "eventsExpected": $eventsExpected,
           "eventsReceived": $eventsReceived,
           "dropRate": $dropRate,
@@ -172,6 +232,7 @@ private fun CertificationReport.toMarkdown(): String {
         |# Connector Certification Report
         |
         |- Connector: $connectorId
+        |- Driver: $driverId
         |- Status: $status
         |- Events expected: $eventsExpected
         |- Events received: $eventsReceived
@@ -182,6 +243,13 @@ private fun CertificationReport.toMarkdown(): String {
         |- Generated at: $generatedAt
         |
     """.trimMargin()
+}
+
+private fun createDriver(driverId: String, dropRate: Double): Driver {
+    return when (driverId) {
+        "example-driver" -> ExampleConnectorDriver()
+        else -> SimulatedDriver(dropRate = dropRate)
+    }
 }
 
 private class SimulatedDriver(
