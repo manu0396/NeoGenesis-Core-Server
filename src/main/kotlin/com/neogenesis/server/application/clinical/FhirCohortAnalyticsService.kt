@@ -11,9 +11,9 @@ class FhirCohortAnalyticsService(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun getCohortDemographics(limit: Int = 2_000): Map<String, Int> {
+    fun getCohortDemographics(tenantId: String, limit: Int = 2_000): Map<String, Int> {
         val stats = linkedMapOf<String, Int>()
-        documentStore.recent(limit)
+        documentStore.recent(tenantId, limit)
             .asSequence()
             .filter { it.documentType == ClinicalDocumentType.FHIR }
             .forEach { doc ->
@@ -29,9 +29,9 @@ class FhirCohortAnalyticsService(
         return stats
     }
 
-    fun getViabilityMetricsByTissue(limit: Int = 2_000): Map<String, Double> {
+    fun getViabilityMetricsByTissue(tenantId: String, limit: Int = 2_000): Map<String, Double> {
         val grouped = mutableMapOf<String, MutableList<Double>>()
-        documentStore.recent(limit).forEach { doc ->
+        documentStore.recent(tenantId, limit).forEach { doc ->
             val tissue = doc.metadata["tissueType"]?.ifBlank { null } ?: "retina"
             val qualityScore = doc.metadata["viabilityPrediction"]?.toDoubleOrNull()
             if (qualityScore != null) {

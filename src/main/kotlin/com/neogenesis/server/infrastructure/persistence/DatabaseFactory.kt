@@ -25,9 +25,14 @@ class DatabaseFactory(private val config: AppConfig.DatabaseConfig) {
         val dataSource = HikariDataSource(hikariConfig)
 
         if (config.migrateOnStartup) {
+            val locations = mutableListOf("classpath:db/migration")
+            if (config.jdbcUrl.startsWith("jdbc:postgresql:", ignoreCase = true)) {
+                locations.add("classpath:db/migration_postgres")
+            }
+
             Flyway.configure()
                 .dataSource(dataSource)
-                .locations("classpath:db/migration")
+                .locations(*locations.toTypedArray())
                 .baselineOnMigrate(true)
                 .load()
                 .migrate()

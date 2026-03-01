@@ -35,7 +35,11 @@ import com.neogenesis.server.domain.model.TraceabilityRequirement
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
 import com.neogenesis.server.infrastructure.security.actor
 import com.neogenesis.server.infrastructure.security.secured
+import com.neogenesis.server.infrastructure.security.tenantId
+import com.neogenesis.server.infrastructure.security.withAbac
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.plugins.ratelimit.RateLimitName
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
@@ -49,6 +53,28 @@ import kotlinx.serialization.SerializationException
 import java.time.Instant
 import java.util.Base64
 import javax.sql.DataSource
+
+import com.neogenesis.server.application.quality.QualityScoringService
+
+fun Route.qualityRoutes(
+    qualityScoringService: QualityScoringService,
+    telemetryEventStore: TelemetryEventStore,
+    metricsService: OperationalMetricsService,
+) {
+    secured(requiredRoles = setOf("researcher", "quality_manager"), metricsService = metricsService) {
+        get("/quality/reproducibility/{jobId}") {
+            val jobId = call.parameters["jobId"] ?: throw BadRequestException("job_required", "jobId is required")
+            val baselineJobId = call.request.queryParameters["baselineJobId"] ?: throw BadRequestException("baseline_required", "baselineJobId is required")
+            
+            val tenantId = call.tenantId()
+            val actual = telemetryEventStore.recent(tenantId, 1000).filter { it.telemetry.printJobId == jobId }.map { it.telemetry }
+            val expected = telemetryEventStore.recent(tenantId, 1000).filter { it.telemetry.printJobId == baselineJobId }.map { it.telemetry }
+            
+            val score = qualityScoringService.calculateScore(actual, expected)
+            call.respond(score)
+        }
+    }
+}
 
 fun Route.healthRoutes(
     grpcPort: Int,
@@ -94,10 +120,11 @@ fun Route.telemetryRoutes(
     controlCommandStore: ControlCommandStore,
     telemetryProcessingService: TelemetryProcessingService,
     metricsService: OperationalMetricsService,
+    abacPolicyEngine: com.neogenesis.server.application.security.AbacPolicyEngine,
 ) {
     secured(requiredRoles = setOf("operator", "researcher", "controller"), metricsService = metricsService) {
         get("/telemetry") {
-            call.respond(telemetrySnapshotService.findAll().map { it.toResponse() })
+            call.respond(telemetrySnapshotService.findAll(call.tenantId()).map { it.toResponse() })
         }
 
         get("/telemetry/{printerId}") {
@@ -107,7 +134,7 @@ fun Route.telemetryRoutes(
                 return@get
             }
 
-            val telemetry = telemetrySnapshotService.findByPrinterId(printerId)
+            val telemetry = telemetrySnapshotService.findByPrinterId(call.tenantId(), printerId)
             if (telemetry == null) {
                 call.respond(HttpStatusCode.NotFound, ApiError("No telemetry found for printer $printerId"))
                 return@get
@@ -118,64 +145,77 @@ fun Route.telemetryRoutes(
 
         get("/telemetry/history") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-            call.respond(telemetryEventStore.recent(limit).map { it.toResponse() })
+            call.respond(telemetryEventStore.recent(call.tenantId(), limit).map { it.toResponse() })
         }
 
         get("/commands/history") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-            call.respond(controlCommandStore.recent(limit).map { it.toResponse() })
+            call.respond(controlCommandStore.recent(call.tenantId(), limit).map { it.toResponse() })
         }
     }
 
-    secured(requiredRoles = setOf("controller"), metricsService = metricsService) {
-        post("/telemetry/evaluate") {
-            val request = call.receive<TelemetryEvaluateRequest>()
+    rateLimit(RateLimitName("tenant-write")) {
+            secured(requiredRoles = setOf("controller"), metricsService = metricsService) {
+                withAbac(
+                    action = "telemetry.evaluate",
+                    resourceType = "printer",
+                    abacPolicyEngine = abacPolicyEngine,
+                    metricsService = metricsService,
+                    getResourceId = { it.parameters["printerId"] ?: "unknown" },
+                    getAttributes = { mapOf("site_id" to (it.request.headers["x-site-id"] ?: "default")) }
+                ) {
+        
+                post("/telemetry/evaluate") {
+                    val request = call.receive<TelemetryEvaluateRequest>()
 
-            val encryptedPayload =
-                request.encryptedImageMatrixBase64
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let {
-                        try {
-                            Base64.getDecoder().decode(it)
-                        } catch (_: IllegalArgumentException) {
-                            call.respond(HttpStatusCode.BadRequest, ApiError("encryptedImageMatrixBase64 must be valid Base64"))
-                            return@post
-                        }
-                    }
-                    ?: byteArrayOf()
+                    val encryptedPayload =
+                        request.encryptedImageMatrixBase64
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let {
+                                try {
+                                    Base64.getDecoder().decode(it)
+                                } catch (_: IllegalArgumentException) {
+                                    call.respond(HttpStatusCode.BadRequest, ApiError("encryptedImageMatrixBase64 must be valid Base64"))
+                                    return@post
+                                }
+                            }
+                            ?: byteArrayOf()
 
-            val telemetry =
-                TelemetryState(
-                    printerId = request.printerId,
-                    timestampMs = request.timestampMs,
-                    nozzleTempCelsius = request.nozzleTempCelsius,
-                    extrusionPressureKPa = request.extrusionPressureKPa,
-                    cellViabilityIndex = request.cellViabilityIndex,
-                    encryptedImageMatrix = encryptedPayload,
-                    bioInkViscosityIndex = request.bioInkViscosityIndex,
-                    bioInkPh = request.bioInkPh,
-                    nirIiTempCelsius = request.nirIiTempCelsius,
-                    morphologicalDefectProbability = request.morphologicalDefectProbability,
-                    printJobId = request.printJobId,
-                    tissueType = request.tissueType,
-                )
+                    val telemetry =
+                        TelemetryState(
+                            printerId = request.printerId,
+                            timestampMs = request.timestampMs,
+                            nozzleTempCelsius = request.nozzleTempCelsius,
+                            extrusionPressureKPa = request.extrusionPressureKPa,
+                            cellViabilityIndex = request.cellViabilityIndex,
+                            encryptedImageMatrix = encryptedPayload,
+                            bioInkViscosityIndex = request.bioInkViscosityIndex,
+                            bioInkPh = request.bioInkPh,
+                            nirIiTempCelsius = request.nirIiTempCelsius,
+                            morphologicalDefectProbability = request.morphologicalDefectProbability,
+                            printJobId = request.printJobId,
+                            tissueType = request.tissueType,
+                        )
 
-            val result =
-                telemetryProcessingService.process(
-                    telemetry = telemetry,
-                    source = "http",
-                    actor = call.actor(),
-                )
+                    val result =
+                        telemetryProcessingService.process(
+                            tenantId = call.tenantId(),
+                            telemetry = telemetry,
+                            source = "http",
+                            actor = call.actor(),
+                        )
 
-            call.respond(
-                ControlDecisionResponse(
-                    commandId = result.command.commandId,
-                    actionType = result.command.actionType,
-                    adjustPressure = result.command.adjustPressure,
-                    adjustSpeed = result.command.adjustSpeed,
-                    reason = result.command.reason,
-                ),
-            )
+                    call.respond(
+                        ControlDecisionResponse(
+                            commandId = result.command.commandId,
+                            actionType = result.command.actionType,
+                            adjustPressure = result.command.adjustPressure,
+                            adjustSpeed = result.command.adjustSpeed,
+                            reason = result.command.reason,
+                        ),
+                    )
+                }
+            }
         }
     }
 }
@@ -186,7 +226,7 @@ fun Route.digitalTwinRoutes(
 ) {
     secured(requiredRoles = setOf("operator", "researcher", "controller"), metricsService = metricsService) {
         get("/digital-twin") {
-            call.respond(digitalTwinService.findAll())
+            call.respond(digitalTwinService.findAll(call.tenantId()))
         }
 
         get("/digital-twin/{printerId}") {
@@ -196,7 +236,7 @@ fun Route.digitalTwinRoutes(
                 return@get
             }
 
-            val state = digitalTwinService.findByPrinterId(printerId)
+            val state = digitalTwinService.findByPrinterId(call.tenantId(), printerId)
             if (state == null) {
                 call.respond(HttpStatusCode.NotFound, ApiError("No digital twin state for printer $printerId"))
                 return@get
@@ -216,6 +256,7 @@ fun Route.clinicalRoutes(
     idempotencyService: RequestIdempotencyService,
     requireIdempotencyKey: Boolean,
     metricsService: OperationalMetricsService,
+    abacPolicyEngine: com.neogenesis.server.application.security.AbacPolicyEngine,
 ) {
     secured(requiredRoles = setOf("clinician", "integrator"), metricsService = metricsService) {
         post("/clinical/fhir") {
@@ -227,7 +268,7 @@ fun Route.clinicalRoutes(
                     canonicalPayload = request.resourceJson,
                     requireKey = requireIdempotencyKey,
                 )
-                val doc = clinicalIntegrationService.ingestFhir(request.resourceJson, call.actor())
+                val doc = clinicalIntegrationService.ingestFhir(call.tenantId(), request.resourceJson, call.actor())
                 call.respond(doc.toResponse())
             } catch (_: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("Invalid FHIR payload"))
@@ -245,7 +286,7 @@ fun Route.clinicalRoutes(
                     canonicalPayload = request.message,
                     requireKey = requireIdempotencyKey,
                 )
-                val doc = clinicalIntegrationService.ingestHl7(request.message, call.actor())
+                val doc = clinicalIntegrationService.ingestHl7(call.tenantId(), request.message, call.actor())
                 call.respond(doc.toResponse())
             } catch (_: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("Invalid HL7 payload"))
@@ -263,7 +304,7 @@ fun Route.clinicalRoutes(
                     canonicalPayload = request.metadataJson,
                     requireKey = requireIdempotencyKey,
                 )
-                val doc = clinicalIntegrationService.ingestDicomMetadata(request.metadataJson, call.actor())
+                val doc = clinicalIntegrationService.ingestDicomMetadata(call.tenantId(), request.metadataJson, call.actor())
                 call.respond(doc.toResponse())
             } catch (_: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("Invalid DICOM metadata payload"))
@@ -272,29 +313,38 @@ fun Route.clinicalRoutes(
             }
         }
 
-        post("/clinical/pacs/import-latest") {
-            val request = call.receive<PacsImportLatestRequest>()
-            call.enforceIdempotency(
-                idempotencyService = idempotencyService,
-                operation = "clinical.pacs.import_latest",
-                canonicalPayload = request.patientId,
-                requireKey = requireIdempotencyKey,
-            )
-            val document =
-                try {
-                    clinicalPacsService.importLatestStudy(
-                        patientId = request.patientId,
-                        actor = call.actor(),
-                    )
-                } catch (_: DependencyUnavailableException) {
-                    call.respond(HttpStatusCode.ServiceUnavailable, ApiError("PACS integration is disabled"))
+        withAbac(
+            action = "clinical.pacs.import-latest",
+            resourceType = "pacs",
+            abacPolicyEngine = abacPolicyEngine,
+            metricsService = metricsService,
+            getResourceId = { "latest" }
+        ) {
+            post("/clinical/pacs/import-latest") {
+                val request = call.receive<PacsImportLatestRequest>()
+                call.enforceIdempotency(
+                    idempotencyService = idempotencyService,
+                    operation = "clinical.pacs.import_latest",
+                    canonicalPayload = request.patientId,
+                    requireKey = requireIdempotencyKey,
+                )
+                val document =
+                    try {
+                        clinicalPacsService.importLatestStudy(
+                            tenantId = call.tenantId(),
+                            patientId = request.patientId,
+                            actor = call.actor(),
+                        )
+                    } catch (_: DependencyUnavailableException) {
+                        call.respond(HttpStatusCode.ServiceUnavailable, ApiError("PACS integration is disabled"))
+                        return@post
+                    }
+                if (document == null) {
+                    call.respond(HttpStatusCode.NotFound, ApiError("No PACS study found for patient ${request.patientId}"))
                     return@post
                 }
-            if (document == null) {
-                call.respond(HttpStatusCode.NotFound, ApiError("No PACS study found for patient ${request.patientId}"))
-                return@post
+                call.respond(document.toResponse())
             }
-            call.respond(document.toResponse())
         }
 
         post("/clinical/hl7/mllp/send") {
@@ -307,6 +357,7 @@ fun Route.clinicalRoutes(
             )
             val ack =
                 hl7MllpGatewayService.send(
+                    tenantId = call.tenantId(),
                     message = request.message,
                     host = request.host,
                     port = request.port,
@@ -381,7 +432,7 @@ fun Route.clinicalRoutes(
     secured(requiredRoles = setOf("clinician", "integrator", "auditor"), metricsService = metricsService) {
         get("/clinical/documents") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-            call.respond(clinicalIntegrationService.recent(limit).map { it.toResponse() })
+            call.respond(clinicalIntegrationService.recent(call.tenantId(), limit).map { it.toResponse() })
         }
 
         get("/clinical/documents/{patientId}") {
@@ -392,7 +443,7 @@ fun Route.clinicalRoutes(
             }
 
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-            call.respond(clinicalIntegrationService.findByPatientId(patientId, limit).map { it.toResponse() })
+            call.respond(clinicalIntegrationService.findByPatientId(call.tenantId(), patientId, limit).map { it.toResponse() })
         }
 
         get("/clinical/pacs/studies/{patientId}") {
@@ -414,12 +465,12 @@ fun Route.clinicalRoutes(
 
         get("/clinical/analytics/cohort/demographics") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 20_000) ?: 2_000
-            call.respond(fhirCohortAnalyticsService.getCohortDemographics(limit))
+            call.respond(fhirCohortAnalyticsService.getCohortDemographics(call.tenantId(), limit))
         }
 
         get("/clinical/analytics/cohort/viability-by-tissue") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 20_000) ?: 2_000
-            call.respond(fhirCohortAnalyticsService.getViabilityMetricsByTissue(limit))
+            call.respond(fhirCohortAnalyticsService.getViabilityMetricsByTissue(call.tenantId(), limit))
         }
     }
 }
@@ -433,6 +484,7 @@ fun Route.retinaRoutes(
             val request = call.receive<RetinaPlanFromDicomRequest>()
             val plan =
                 retinalPlanningService.createPlanFromDicom(
+                    tenantId = call.tenantId(),
                     patientId = request.patientId,
                     sourceDocumentId = request.sourceDocumentId,
                     metadata = request.metadata,
@@ -448,7 +500,7 @@ fun Route.retinaRoutes(
                 return@get
             }
 
-            val plan = retinalPlanningService.findByPlanId(planId)
+            val plan = retinalPlanningService.findByPlanId(call.tenantId(), planId)
             if (plan == null) {
                 call.respond(HttpStatusCode.NotFound, ApiError("Retinal plan not found: $planId"))
                 return@get
@@ -460,7 +512,7 @@ fun Route.retinaRoutes(
         get("/retina/plans") {
             val patientId = call.request.queryParameters["patientId"]
             if (!patientId.isNullOrBlank()) {
-                val plan = retinalPlanningService.findLatestByPatientId(patientId)
+                val plan = retinalPlanningService.findLatestByPatientId(call.tenantId(), patientId)
                 if (plan == null) {
                     call.respond(HttpStatusCode.NotFound, ApiError("No retinal plan for patient $patientId"))
                     return@get
@@ -470,7 +522,7 @@ fun Route.retinaRoutes(
             }
 
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 100
-            call.respond(retinalPlanningService.findRecent(limit))
+            call.respond(retinalPlanningService.findRecent(call.tenantId(), limit))
         }
     }
 }
@@ -484,6 +536,7 @@ fun Route.printSessionRoutes(
             val request = call.receive<CreatePrintSessionRequest>()
             val created =
                 printSessionService.create(
+                    tenantId = call.tenantId(),
                     printerId = request.printerId,
                     planId = request.planId,
                     patientId = request.patientId,
@@ -498,7 +551,7 @@ fun Route.printSessionRoutes(
                 call.respond(HttpStatusCode.BadRequest, ApiError("sessionId is required"))
                 return@post
             }
-            val session = printSessionService.activate(sessionId, call.actor())
+            val session = printSessionService.activate(call.tenantId(), sessionId, call.actor())
             if (session == null) {
                 call.respond(HttpStatusCode.NotFound, ApiError("Session not found: $sessionId"))
                 return@post
@@ -512,7 +565,7 @@ fun Route.printSessionRoutes(
                 call.respond(HttpStatusCode.BadRequest, ApiError("sessionId is required"))
                 return@post
             }
-            val session = printSessionService.complete(sessionId, call.actor())
+            val session = printSessionService.complete(call.tenantId(), sessionId, call.actor())
             if (session == null) {
                 call.respond(HttpStatusCode.NotFound, ApiError("Session not found: $sessionId"))
                 return@post
@@ -526,7 +579,7 @@ fun Route.printSessionRoutes(
                 call.respond(HttpStatusCode.BadRequest, ApiError("sessionId is required"))
                 return@post
             }
-            val session = printSessionService.abort(sessionId, call.actor())
+            val session = printSessionService.abort(call.tenantId(), sessionId, call.actor())
             if (session == null) {
                 call.respond(HttpStatusCode.NotFound, ApiError("Session not found: $sessionId"))
                 return@post
@@ -540,7 +593,7 @@ fun Route.printSessionRoutes(
                 call.respond(HttpStatusCode.BadRequest, ApiError("printerId is required"))
                 return@get
             }
-            val session = printSessionService.findActiveByPrinterId(printerId)
+            val session = printSessionService.findActiveByPrinterId(call.tenantId(), printerId)
             if (session == null) {
                 call.respond(HttpStatusCode.NotFound, ApiError("No active session for printer $printerId"))
                 return@get
@@ -550,7 +603,7 @@ fun Route.printSessionRoutes(
 
         get("/print-sessions/active") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 100
-            call.respond(printSessionService.findActive(limit))
+            call.respond(printSessionService.findActive(call.tenantId(), limit))
         }
     }
 }
@@ -562,7 +615,7 @@ fun Route.sreRoutes(
     secured(requiredRoles = setOf("sre", "auditor"), metricsService = metricsService) {
         get("/sre/latency-breaches") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 200
-            call.respond(latencyBudgetService.recentBreaches(limit).map { it.toResponse() })
+            call.respond(latencyBudgetService.recentBreaches(call.tenantId(), limit).map { it.toResponse() })
         }
     }
 }
@@ -628,13 +681,13 @@ fun Route.complianceRoutes(
 
         get("/compliance/audit") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 200
-            call.respond(auditTrailService.recent(limit).map { it.toResponse() })
+            call.respond(auditTrailService.recent(limit = limit, tenantId = call.tenantId()).map { it.toResponse() })
         }
 
         get("/compliance/audit/verify-chain") {
             billingService?.requireEntitlement(call.actor(), "compliance:traceability_audit")
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 50_000) ?: 10_000
-            call.respond(auditTrailService.verifyChain(limit))
+            call.respond(auditTrailService.verifyChain(limit = limit, tenantId = call.tenantId()))
         }
     }
 }
@@ -642,19 +695,29 @@ fun Route.complianceRoutes(
 fun Route.regulatoryRoutes(
     regulatoryComplianceService: RegulatoryComplianceService,
     metricsService: OperationalMetricsService,
+    abacPolicyEngine: com.neogenesis.server.application.security.AbacPolicyEngine,
 ) {
     secured(requiredRoles = setOf("quality_manager", "auditor"), metricsService = metricsService) {
-        post("/regulatory/capa") {
-            val request = call.receive<CreateCapaRequest>()
-            val created =
-                regulatoryComplianceService.createCapa(
-                    title = request.title,
-                    description = request.description,
-                    requirementId = request.requirementId,
-                    owner = request.owner,
-                    actor = call.actor(),
-                )
-            call.respond(created)
+        withAbac(
+            action = "regulatory.capa.create",
+            resourceType = "capa",
+            abacPolicyEngine = abacPolicyEngine,
+            metricsService = metricsService,
+            getResourceId = { null }
+        ) {
+            post("/regulatory/capa") {
+                val request = call.receive<CreateCapaRequest>()
+                val created =
+                    regulatoryComplianceService.createCapa(
+                        tenantId = call.tenantId(),
+                        title = request.title,
+                        description = request.description,
+                        requirementId = request.requirementId,
+                        owner = request.owner,
+                        actor = call.actor(),
+                    )
+                call.respond(created)
+            }
         }
 
         post("/regulatory/capa/{capaId}/status") {
@@ -671,6 +734,7 @@ fun Route.regulatoryRoutes(
                 }
             val updated =
                 regulatoryComplianceService.updateCapaStatus(
+                    tenantId = call.tenantId(),
                     capaId = capaId,
                     status = status,
                     actor = call.actor(),
@@ -684,14 +748,16 @@ fun Route.regulatoryRoutes(
 
         get("/regulatory/capa") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-            call.respond(regulatoryComplianceService.listCapas(limit))
+            call.respond(regulatoryComplianceService.listCapas(call.tenantId(), limit))
         }
 
         post("/regulatory/risk") {
             val request = call.receive<UpsertRiskRequest>()
             regulatoryComplianceService.upsertRisk(
+                tenantId = call.tenantId(),
                 record =
                     RiskRecord(
+                        tenantId = call.tenantId(),
                         riskId = request.riskId,
                         hazardDescription = request.hazardDescription,
                         severity = request.severity,
@@ -709,13 +775,14 @@ fun Route.regulatoryRoutes(
 
         get("/regulatory/risk") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-            call.respond(regulatoryComplianceService.listRisks(limit))
+            call.respond(regulatoryComplianceService.listRisks(call.tenantId(), limit))
         }
 
         post("/regulatory/dhf") {
             val request = call.receive<AddDhfArtifactRequest>()
             val created =
                 regulatoryComplianceService.addDhfArtifact(
+                    tenantId = call.tenantId(),
                     artifactType = request.artifactType,
                     artifactName = request.artifactName,
                     version = request.version,
@@ -729,7 +796,7 @@ fun Route.regulatoryRoutes(
 
         get("/regulatory/dhf") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-            call.respond(regulatoryComplianceService.listDhfArtifacts(limit))
+            call.respond(regulatoryComplianceService.listDhfArtifacts(call.tenantId(), limit))
         }
     }
 }
@@ -743,6 +810,7 @@ fun Route.gdprRoutes(
             val request = call.receive<GdprConsentRequest>()
             val record =
                 gdprService.grantConsent(
+                    tenantId = call.tenantId(),
                     patientId = request.patientId,
                     purpose = request.purpose,
                     legalBasis = request.legalBasis,
@@ -755,6 +823,7 @@ fun Route.gdprRoutes(
             val request = call.receive<GdprConsentRequest>()
             val record =
                 gdprService.revokeConsent(
+                    tenantId = call.tenantId(),
                     patientId = request.patientId,
                     purpose = request.purpose,
                     legalBasis = request.legalBasis,
@@ -772,6 +841,7 @@ fun Route.gdprRoutes(
             val request = call.receive<GdprErasureRequest>()
             val record =
                 gdprService.recordErasure(
+                    tenantId = call.tenantId(),
                     patientId = patientId,
                     reason = request.reason,
                     actor = call.actor(),
@@ -781,11 +851,11 @@ fun Route.gdprRoutes(
 
         get("/gdpr/erasures") {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-            call.respond(gdprService.recentErasures(limit))
+            call.respond(gdprService.recentErasures(call.tenantId(), limit))
         }
 
         post("/gdpr/retention/enforce") {
-            val affected = gdprService.enforceRetention(call.actor())
+            val affected = gdprService.enforceRetention(call.tenantId(), call.actor())
             call.respond(mapOf("status" to "retention_enforced", "affectedRows" to affected.toString()))
         }
     }

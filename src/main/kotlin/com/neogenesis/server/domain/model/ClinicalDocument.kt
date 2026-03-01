@@ -11,6 +11,7 @@ enum class ClinicalDocumentType {
 
 @Serializable
 data class ClinicalDocument(
+    val tenantId: String,
     val documentType: ClinicalDocumentType,
     val externalId: String?,
     val patientId: String?,

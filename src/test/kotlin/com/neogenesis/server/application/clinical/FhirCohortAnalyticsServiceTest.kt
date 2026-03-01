@@ -11,12 +11,14 @@ import kotlin.test.assertTrue
 class FhirCohortAnalyticsServiceTest {
     @Test
     fun `builds demographics and viability by tissue`() {
+        val tenantId = "test-tenant"
         val service =
             FhirCohortAnalyticsService(
                 documentStore =
                     FakeClinicalDocumentStore(
                         listOf(
                             ClinicalDocument(
+                                tenantId = tenantId,
                                 documentType = ClinicalDocumentType.FHIR,
                                 externalId = "f1",
                                 patientId = "p1",
@@ -24,6 +26,7 @@ class FhirCohortAnalyticsServiceTest {
                                 metadata = mapOf("tissueType" to "retina", "viabilityPrediction" to "0.93"),
                             ),
                             ClinicalDocument(
+                                tenantId = tenantId,
                                 documentType = ClinicalDocumentType.FHIR,
                                 externalId = "f2",
                                 patientId = "p2",
@@ -34,8 +37,8 @@ class FhirCohortAnalyticsServiceTest {
                     ),
             )
 
-        val demographics = service.getCohortDemographics()
-        val viability = service.getViabilityMetricsByTissue()
+        val demographics = service.getCohortDemographics(tenantId)
+        val viability = service.getViabilityMetricsByTissue(tenantId)
 
         assertEquals(1, demographics["female"])
         assertEquals(1, demographics["male"])
@@ -49,11 +52,12 @@ class FhirCohortAnalyticsServiceTest {
     ) : ClinicalDocumentStore {
         override fun append(document: ClinicalDocument) = Unit
 
-        override fun recent(limit: Int): List<ClinicalDocument> = docs.take(limit)
+        override fun recent(tenantId: String, limit: Int): List<ClinicalDocument> = docs.filter { it.tenantId == tenantId }.take(limit)
 
         override fun findByPatientId(
+            tenantId: String,
             patientId: String,
             limit: Int,
-        ): List<ClinicalDocument> = docs.filter { it.patientId == patientId }.take(limit)
+        ): List<ClinicalDocument> = docs.filter { it.tenantId == tenantId && it.patientId == patientId }.take(limit)
     }
 }

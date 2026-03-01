@@ -10,6 +10,7 @@ import com.neogenesis.server.infrastructure.persistence.TelemetryRepository
 import com.neogenesis.server.infrastructure.persistence.TwinMetricsRepository
 import com.neogenesis.server.infrastructure.security.actor
 import com.neogenesis.server.infrastructure.security.enforceRole
+import com.neogenesis.server.infrastructure.security.tenantId
 import com.neogenesis.server.modules.ApiException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -48,7 +49,7 @@ fun Route.evidencePackModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(tenantId, jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             if (!job.tenantId.isNullOrBlank() && job.tenantId != tenantId) {
                 throw ApiException("tenant_mismatch", "tenant mismatch", HttpStatusCode.Forbidden)
@@ -56,6 +57,7 @@ fun Route.evidencePackModule(
 
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "evidence.pack.report.export",
                     resourceType = "evidence_pack",
@@ -94,7 +96,7 @@ fun Route.evidencePackModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(tenantId, jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             if (!job.tenantId.isNullOrBlank() && job.tenantId != tenantId) {
                 throw ApiException("tenant_mismatch", "tenant mismatch", HttpStatusCode.Forbidden)
@@ -102,6 +104,7 @@ fun Route.evidencePackModule(
 
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "evidence.pack.report.export.pdf",
                     resourceType = "evidence_pack",
@@ -141,7 +144,7 @@ fun Route.evidencePackModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(tenantId, jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             if (!job.tenantId.isNullOrBlank() && job.tenantId != tenantId) {
                 throw ApiException("tenant_mismatch", "tenant mismatch", HttpStatusCode.Forbidden)
@@ -149,6 +152,7 @@ fun Route.evidencePackModule(
 
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "evidence.pack.bundle.export",
                     resourceType = "evidence_pack",
@@ -304,11 +308,18 @@ private fun buildEvidenceBundle(
             generatedAt = Instant.now().toString(),
             entries = manifestEntries,
         )
-    files["manifest.json"] = Json.encodeToString(manifest).toByteArray(Charsets.UTF_8)
+    val manifestJson = Json.encodeToString(manifest)
+    files["manifest.json"] = manifestJson.toByteArray(Charsets.UTF_8)
+    
+    // Sign the manifest
+    val signature = hmacSha256(manifestJson.toByteArray(Charsets.UTF_8), "evidence-signing-key-placeholder".toByteArray(Charsets.UTF_8))
+    files["manifest.sig"] = signature.toByteArray(Charsets.UTF_8)
 
     val output = ByteArrayOutputStream()
     ZipOutputStream(output).use { zip ->
-        files.forEach { (name, bytes) ->
+        // Sort files for determinism
+        files.keys.sorted().forEach { name ->
+            val bytes = files[name]!!
             val entry = ZipEntry(name)
             zip.putNextEntry(entry)
             zip.write(bytes)
@@ -316,6 +327,13 @@ private fun buildEvidenceBundle(
         }
     }
     return output.toByteArray()
+}
+
+private fun hmacSha256(data: ByteArray, key: ByteArray): String {
+    val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+    val secretKey = javax.crypto.spec.SecretKeySpec(key, "HmacSHA256")
+    mac.init(secretKey)
+    return mac.doFinal(data).joinToString("") { "%02x".format(it) }
 }
 
 private fun sanitizeJobId(jobId: String): String {

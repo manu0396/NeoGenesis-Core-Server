@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class GdprErasureRecord(
+    val tenantId: String,
     val id: Long? = null,
     val patientId: String,
     val requestedBy: String,

@@ -16,6 +16,7 @@ class GrpcCorrelationTracingInterceptor(
 ) : ServerInterceptor {
     private val tracer = openTelemetry?.getTracer("neogenesis-grpc")
     private val correlationHeader = Metadata.Key.of("x-correlation-id", Metadata.ASCII_STRING_MARSHALLER)
+    private val tenantHeader = Metadata.Key.of("x-tenant-id", Metadata.ASCII_STRING_MARSHALLER)
 
     override fun <ReqT : Any?, RespT : Any?> interceptCall(
         call: ServerCall<ReqT, RespT>,
@@ -23,12 +24,15 @@ class GrpcCorrelationTracingInterceptor(
         next: ServerCallHandler<ReqT, RespT>,
     ): ServerCall.Listener<ReqT> {
         val correlationId = headers.get(correlationHeader) ?: UUID.randomUUID().toString()
+        val tenantId = headers.get(tenantHeader) ?: GrpcAuthContextKeys.tenantId.get() ?: "default"
+
         val span =
             tracer?.spanBuilder(call.methodDescriptor.fullMethodName)
                 ?.setSpanKind(SpanKind.SERVER)
                 ?.setAttribute(stringKey("rpc.system"), "grpc")
                 ?.setAttribute(stringKey("rpc.method"), call.methodDescriptor.fullMethodName)
                 ?.setAttribute(stringKey("neogenesis.correlation_id"), correlationId)
+                ?.setAttribute(stringKey("neogenesis.tenant_id"), tenantId)
                 ?.startSpan()
 
         val wrappedCall =

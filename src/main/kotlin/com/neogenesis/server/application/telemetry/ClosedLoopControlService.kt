@@ -14,15 +14,15 @@ class ClosedLoopControlService(
     private val printSessionStore: PrintSessionStore,
     private val retinalPlanStore: RetinalPlanStore,
 ) {
-    fun decide(telemetry: TelemetryState): ControlCommand {
-        val baseline = decisionService.evaluate(telemetry)
+    fun decide(tenantId: String, telemetry: TelemetryState): ControlCommand {
+        val baseline = decisionService.evaluate(tenantId, telemetry)
 
         val activeSession =
-            printSessionStore.findActiveByPrinterId(telemetry.printerId)
+            printSessionStore.findActiveByPrinterId(tenantId, telemetry.printerId)
                 ?: return baseline
 
         val plan =
-            retinalPlanStore.findByPlanId(activeSession.planId)
+            retinalPlanStore.findByPlanId(tenantId, activeSession.planId)
                 ?: return baseline.copy(reason = "${baseline.reason}; active session without retinal plan")
 
         val constraints = plan.constraints
@@ -34,6 +34,7 @@ class ClosedLoopControlService(
             abs(telemetry.bioInkPh - constraints.targetBioInkPh) > constraints.phTolerance
         ) {
             return ControlCommand(
+                tenantId = tenantId,
                 commandId = commandId(),
                 printerId = telemetry.printerId,
                 actionType = ControlActionType.EMERGENCY_HALT,
@@ -59,6 +60,7 @@ class ClosedLoopControlService(
 
         if (pressureAdjust != 0.0f || speedAdjust != 0.0f) {
             return ControlCommand(
+                tenantId = tenantId,
                 commandId = commandId(),
                 printerId = telemetry.printerId,
                 actionType = ControlActionType.ADJUST,

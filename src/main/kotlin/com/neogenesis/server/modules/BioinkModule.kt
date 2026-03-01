@@ -4,6 +4,7 @@ import com.neogenesis.server.infrastructure.persistence.AuditLogRepository
 import com.neogenesis.server.infrastructure.persistence.CanonicalRole
 import com.neogenesis.server.infrastructure.persistence.JobRepository
 import com.neogenesis.server.infrastructure.security.enforceRole
+import com.neogenesis.server.infrastructure.security.tenantId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
@@ -28,7 +29,7 @@ fun Route.bioinkModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(call.tenantId(), jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             val request = call.receive<RecordBioinkBatchRequest>()
 

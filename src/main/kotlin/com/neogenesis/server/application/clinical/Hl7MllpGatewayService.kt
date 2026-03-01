@@ -16,6 +16,7 @@ class Hl7MllpGatewayService(
     private val resilienceExecutor: IntegrationResilienceExecutor,
 ) {
     fun send(
+        tenantId: String,
         message: String,
         host: String,
         port: Int,
@@ -31,7 +32,7 @@ class Hl7MllpGatewayService(
                         connectTimeoutMs = mllpConfig.connectTimeoutMs,
                         readTimeoutMs = mllpConfig.readTimeoutMs,
                     )
-                clinicalIntegrationService.ingestHl7(message, actor)
+                clinicalIntegrationService.ingestHl7(tenantId, message, actor)
                 metricsService.recordMllpOutbound("success")
                 ack
             }.getOrElse {
@@ -41,9 +42,9 @@ class Hl7MllpGatewayService(
         }
     }
 
-    fun onInboundMessage(message: String): String {
+    fun onInboundMessage(tenantId: String, message: String): String {
         return try {
-            clinicalIntegrationService.ingestHl7(message, "mllp-listener")
+            clinicalIntegrationService.ingestHl7(tenantId, message, "mllp-listener")
             metricsService.recordMllpInbound()
             buildAck(message, "AA", "OK")
         } catch (error: Exception) {

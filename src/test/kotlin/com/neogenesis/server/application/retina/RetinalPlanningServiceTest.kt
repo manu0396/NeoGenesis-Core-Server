@@ -20,9 +20,11 @@ class RetinalPlanningServiceTest {
         val metrics = OperationalMetricsService(SimpleMeterRegistry())
         val auditService = AuditTrailService(auditStore, metrics)
         val service = RetinalPlanningService(store, auditService, metrics)
+        val tenantId = "test-tenant"
 
         val plan =
             service.createPlanFromDicom(
+                tenantId = tenantId,
                 patientId = "patient-1",
                 sourceDocumentId = "dicom-1",
                 metadata = mapOf("layerCount" to "8", "retinalThicknessMicrons" to "300"),
@@ -30,8 +32,9 @@ class RetinalPlanningServiceTest {
             )
 
         assertEquals("patient-1", plan.patientId)
+        assertEquals(tenantId, plan.tenantId)
         assertEquals(8, plan.layers.size)
-        assertNotNull(store.findByPlanId(plan.planId))
+        assertNotNull(store.findByPlanId(tenantId, plan.planId))
     }
 
     private class FakeRetinalPlanStore : RetinalPlanStore {
@@ -41,12 +44,14 @@ class RetinalPlanningServiceTest {
             data[plan.planId] = plan
         }
 
-        override fun findByPlanId(planId: String): RetinalPrintPlan? = data[planId]
+        override fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan? =
+            data[planId]?.takeIf { it.tenantId == tenantId }
 
-        override fun findLatestByPatientId(patientId: String): RetinalPrintPlan? =
-            data.values.filter { it.patientId == patientId }.maxByOrNull { it.createdAtMs }
+        override fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan? =
+            data.values.filter { it.tenantId == tenantId && it.patientId == patientId }.maxByOrNull { it.createdAtMs }
 
-        override fun findRecent(limit: Int): List<RetinalPrintPlan> = data.values.sortedByDescending { it.createdAtMs }.take(limit)
+        override fun findRecent(tenantId: String, limit: Int): List<RetinalPrintPlan> =
+            data.values.filter { it.tenantId == tenantId }.sortedByDescending { it.createdAtMs }.take(limit)
     }
 
     private class FakeAuditStore : AuditEventStore {
@@ -56,12 +61,13 @@ class RetinalPlanningServiceTest {
             events += event
         }
 
-        override fun recent(limit: Int): List<AuditEvent> = events.takeLast(limit)
+        override fun recent(tenantId: String, limit: Int): List<AuditEvent> =
+            events.filter { it.tenantId == tenantId }.takeLast(limit)
 
-        override fun verifyChain(limit: Int): AuditChainVerification {
+        override fun verifyChain(tenantId: String, limit: Int): AuditChainVerification {
             return AuditChainVerification(
                 valid = true,
-                checkedEvents = events.size.coerceAtMost(limit),
+                checkedEvents = events.filter { it.tenantId == tenantId }.size.coerceAtMost(limit),
                 failureIndex = null,
                 failureReason = null,
             )

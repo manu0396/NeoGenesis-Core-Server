@@ -344,6 +344,7 @@ class CommercialService(
     ) {
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actorId,
                 action = action,
                 resourceType = "commercial",

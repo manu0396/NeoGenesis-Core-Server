@@ -9,6 +9,21 @@
 - Nightly encrypted snapshot to secondary region.
 - IaC restore path for Kubernetes and secrets backend.
 
+## Backup and Restore Commands
+
+### Create a manual backup:
+```bash
+export DB_URL="jdbc:postgresql://localhost:5432/neogenesis"
+export DB_USER="neogenesis"
+export DB_PASSWORD="your-password"
+./scripts/backup.sh /backups/manual-snapshot-$(date +%Y%m%d).dump
+```
+
+### Restore from backup:
+```bash
+./scripts/restore.sh /backups/manual-snapshot-20260228.dump
+```
+
 ## Regional failover
 1. Declare incident and freeze writes on primary.
 2. Promote secondary PostgreSQL from latest WAL.

@@ -14,7 +14,12 @@ env:
   NEOGENESIS_RUNTIME_ENVIRONMENT: production
   ADMIN_API_MODE: "true"
   ADMIN_WEB_MODE: "false"
-  COMPLIANCE_MODE: "false"
+  COMPLIANCE_MODE: "true"
+  COMPLIANCE_ESIGN_ENABLED: "true"
+  COMPLIANCE_RETENTION_DAYS: "3650"
+  COMPLIANCE_WORM_MODE: "false"
+  SECURITY_REQUIRE_IDEMPOTENCY_KEY: "true"
+  OBSERVABILITY_METRICS_PATH: "/metrics"
 
 secrets:
   enabled: true
@@ -27,12 +32,14 @@ secrets:
 
 database:
   enabled: true
-  host: "neogenesis-postgres"
-  port: 5432
-  name: "neogenesis"
-  user: "neogenesis"
-  password: "change-me"
 
 postgres:
   enabled: true
   image: "postgres:15"
+  storage:
+    size: 10Gi
+  host: "neogenesis-postgres"
+  port: 5432
+  database: "neogenesis"
+  user: "neogenesis"
+  password: "change-me"

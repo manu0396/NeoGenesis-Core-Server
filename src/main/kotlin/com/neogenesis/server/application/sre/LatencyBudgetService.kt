@@ -13,6 +13,7 @@ class LatencyBudgetService(
     private val metricsService: OperationalMetricsService,
 ) {
     fun recordIfBreached(
+        tenantId: String,
         printerId: String,
         source: String,
         durationNanos: Long,
@@ -24,6 +25,7 @@ class LatencyBudgetService(
 
         val event =
             LatencyBreachEvent(
+                tenantId = tenantId,
                 printerId = printerId,
                 source = source,
                 durationMs = durationMs,
@@ -34,6 +36,7 @@ class LatencyBudgetService(
 
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = "latency-monitor",
                 action = "sre.latency.breach",
                 resourceType = "printer",
@@ -50,5 +53,5 @@ class LatencyBudgetService(
         )
     }
 
-    fun recentBreaches(limit: Int = 200): List<LatencyBreachEvent> = latencyBreachStore.recent(limit)
+    fun recentBreaches(tenantId: String, limit: Int = 200): List<LatencyBreachEvent> = latencyBreachStore.recent(tenantId, limit)
 }

@@ -73,8 +73,9 @@ class GrpcTelemetryIntegrationTest {
             assertTrue(command.commandId.isNotBlank())
             assertTrue(command.actionType.isNotBlank())
 
-            val telemetryPersisted = fixture.telemetryEventStore.recent(5)
-            val commandsPersisted = fixture.commandStore.recent(5)
+            val tenantId = "default" // tokens in test don't have tenantId claim, so it defaults
+            val telemetryPersisted = fixture.telemetryEventStore.recent(tenantId, 5)
+            val commandsPersisted = fixture.commandStore.recent(tenantId, 5)
             assertEquals(1, telemetryPersisted.size)
             assertEquals(1, commandsPersisted.size)
             assertEquals("printer-1", telemetryPersisted.first().telemetry.printerId)

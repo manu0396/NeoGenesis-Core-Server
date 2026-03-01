@@ -13,6 +13,7 @@ class DigitalTwinServiceTest {
     @Test
     fun `updates digital twin snapshot`() {
         val service = DigitalTwinService(FakeTwinStore())
+        val tenantId = "test-tenant"
 
         val telemetry =
             TelemetryState(
@@ -24,16 +25,18 @@ class DigitalTwinServiceTest {
             )
         val command =
             ControlCommand(
+                tenantId = tenantId,
                 commandId = "cmd-1",
                 printerId = "printer-01",
                 actionType = ControlActionType.MAINTAIN,
                 reason = "ok",
             )
 
-        val updated = service.updateFromTelemetry(telemetry, command)
+        val updated = service.updateFromTelemetry(tenantId, telemetry, command)
 
         assertEquals("printer-01", updated.printerId)
-        assertNotNull(service.findByPrinterId("printer-01"))
+        assertEquals(tenantId, updated.tenantId)
+        assertNotNull(service.findByPrinterId(tenantId, "printer-01"))
     }
 
     private class FakeTwinStore : DigitalTwinStore {
@@ -43,8 +46,10 @@ class DigitalTwinServiceTest {
             store[state.printerId] = state
         }
 
-        override fun findByPrinterId(printerId: String): DigitalTwinState? = store[printerId]
+        override fun findByPrinterId(tenantId: String, printerId: String): DigitalTwinState? =
+            store[printerId]?.takeIf { it.tenantId == tenantId }
 
-        override fun findAll(): List<DigitalTwinState> = store.values.toList()
+        override fun findAll(tenantId: String): List<DigitalTwinState> =
+            store.values.filter { it.tenantId == tenantId }
     }
 }

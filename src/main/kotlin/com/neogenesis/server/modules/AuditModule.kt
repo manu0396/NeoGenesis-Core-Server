@@ -10,6 +10,7 @@ import com.neogenesis.server.infrastructure.persistence.TelemetryRepository
 import com.neogenesis.server.infrastructure.persistence.TwinMetricsRepository
 import com.neogenesis.server.infrastructure.security.actor
 import com.neogenesis.server.infrastructure.security.enforceRole
+import com.neogenesis.server.infrastructure.security.tenantId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.response.respond
@@ -40,7 +41,7 @@ fun Route.auditModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(call.tenantId(), jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             val entries = auditLogRepository.listByJob(job.id, 10_000)
             val verification = auditLogRepository.verifyJobChain(job.id, 10_000)
@@ -63,7 +64,7 @@ fun Route.auditModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(call.tenantId(), jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
 
             val evidence = buildEvidencePackage(job, telemetryRepository, twinMetricsRepository, auditLogRepository, serverVersion)
@@ -78,7 +79,7 @@ fun Route.auditModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(call.tenantId(), jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             val evidence = buildEvidencePackage(job, telemetryRepository, twinMetricsRepository, auditLogRepository, serverVersion)
             call.respond(HttpStatusCode.OK, evidence)
@@ -92,7 +93,7 @@ fun Route.auditModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(call.tenantId(), jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             val evidence = buildEvidencePackage(job, telemetryRepository, twinMetricsRepository, auditLogRepository, serverVersion)
             call.respondText(evidence.toCsv())

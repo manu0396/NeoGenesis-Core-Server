@@ -12,6 +12,7 @@ data class GrpcPrincipal(
 
 object GrpcAuthContextKeys {
     val principal: Context.Key<GrpcPrincipal> = Context.key("neogenesis.grpc.principal")
+    val tenantId: Context.Key<String> = Context.key("neogenesis.grpc.tenant_id")
 }
 
 fun currentGrpcPrincipal(): GrpcPrincipal? = GrpcAuthContextKeys.principal.get()

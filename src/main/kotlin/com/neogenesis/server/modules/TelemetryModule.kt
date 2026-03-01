@@ -6,6 +6,7 @@ import com.neogenesis.server.infrastructure.persistence.JobRepository
 import com.neogenesis.server.infrastructure.persistence.TelemetryRepository
 import com.neogenesis.server.infrastructure.persistence.TwinMetricsRepository
 import com.neogenesis.server.infrastructure.security.enforceRole
+import com.neogenesis.server.infrastructure.security.tenantId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
@@ -38,7 +39,7 @@ fun Route.telemetryModule(
 
             val request = call.receive<JobPayloadIngestRequest>()
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(call.tenantId(), jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             if (job.deviceId != request.deviceId) {
                 throw ApiException("device_mismatch", "deviceId does not match job device", HttpStatusCode.BadRequest)
@@ -81,7 +82,7 @@ fun Route.telemetryModule(
 
             val request = call.receive<JobPayloadIngestRequest>()
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(call.tenantId(), jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             if (job.deviceId != request.deviceId) {
                 throw ApiException("device_mismatch", "deviceId does not match job device", HttpStatusCode.BadRequest)

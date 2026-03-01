@@ -19,7 +19,7 @@ class TelemetrySafetyPolicyTest {
                 cellViabilityIndex = 0.80f,
             )
 
-        val command = policy.decide(telemetry)
+        val command = policy.decide("test-tenant", telemetry)
 
         assertEquals(ControlActionType.EMERGENCY_HALT, command.actionType)
     }
@@ -35,7 +35,7 @@ class TelemetrySafetyPolicyTest {
                 cellViabilityIndex = 0.95f,
             )
 
-        val command = policy.decide(telemetry)
+        val command = policy.decide("test-tenant", telemetry)
 
         assertEquals(ControlActionType.ADJUST, command.actionType)
     }
@@ -51,7 +51,7 @@ class TelemetrySafetyPolicyTest {
                 cellViabilityIndex = 0.95f,
             )
 
-        val command = policy.decide(telemetry)
+        val command = policy.decide("test-tenant", telemetry)
 
         assertEquals(ControlActionType.MAINTAIN, command.actionType)
     }

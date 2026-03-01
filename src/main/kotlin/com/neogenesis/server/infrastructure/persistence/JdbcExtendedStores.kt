@@ -27,7 +27,8 @@ private val extendedJson = Json { ignoreUnknownKeys = true }
 
 class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStore {
     override fun save(plan: RetinalPrintPlan) {
-        dataSource.connection.use { connection ->
+        val tenantId = plan.tenantId
+        dataSource.useTenantConnection(tenantId) { connection ->
             val updated =
                 connection.prepareStatement(
                     """
@@ -39,7 +40,7 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                         layers_json = ?,
                         constraints_json = ?,
                         created_at = ?
-                    WHERE plan_id = ?
+                    WHERE tenant_id = ? AND plan_id = ?
                     """.trimIndent(),
                 ).use { statement ->
                     statement.setString(1, plan.patientId)
@@ -48,7 +49,8 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                     statement.setString(4, encodeLayers(plan.layers))
                     statement.setString(5, encodeConstraints(plan.constraints))
                     statement.setTimestamp(6, Timestamp.from(Instant.ofEpochMilli(plan.createdAtMs)))
-                    statement.setString(7, plan.planId)
+                    statement.setString(7, tenantId)
+                    statement.setString(8, plan.planId)
                     statement.executeUpdate()
                 }
 
@@ -56,6 +58,7 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                 connection.prepareStatement(
                     """
                     INSERT INTO retinal_print_plans(
+                        tenant_id,
                         plan_id,
                         patient_id,
                         source_document_id,
@@ -63,27 +66,29 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                         layers_json,
                         constraints_json,
                         created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """.trimIndent(),
                 ).use { statement ->
-                    statement.setString(1, plan.planId)
-                    statement.setString(2, plan.patientId)
-                    statement.setString(3, plan.sourceDocumentId)
-                    statement.setString(4, plan.blueprintVersion)
-                    statement.setString(5, encodeLayers(plan.layers))
-                    statement.setString(6, encodeConstraints(plan.constraints))
-                    statement.setTimestamp(7, Timestamp.from(Instant.ofEpochMilli(plan.createdAtMs)))
+                    statement.setString(1, tenantId)
+                    statement.setString(2, plan.planId)
+                    statement.setString(3, plan.patientId)
+                    statement.setString(4, plan.sourceDocumentId)
+                    statement.setString(5, plan.blueprintVersion)
+                    statement.setString(6, encodeLayers(plan.layers))
+                    statement.setString(7, encodeConstraints(plan.constraints))
+                    statement.setTimestamp(8, Timestamp.from(Instant.ofEpochMilli(plan.createdAtMs)))
                     statement.executeUpdate()
                 }
             }
         }
     }
 
-    override fun findByPlanId(planId: String): RetinalPrintPlan? {
-        return dataSource.connection.use { connection ->
+    override fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan? {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     plan_id,
                     patient_id,
                     source_document_id,
@@ -92,10 +97,11 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                     constraints_json,
                     created_at
                 FROM retinal_print_plans
-                WHERE plan_id = ?
+                WHERE tenant_id = ? AND plan_id = ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, planId)
+                statement.setString(1, tenantId)
+                statement.setString(2, planId)
                 statement.executeQuery().use { rs ->
                     if (rs.next()) rs.toRetinalPlan() else null
                 }
@@ -103,11 +109,12 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
         }
     }
 
-    override fun findLatestByPatientId(patientId: String): RetinalPrintPlan? {
-        return dataSource.connection.use { connection ->
+    override fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan? {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     plan_id,
                     patient_id,
                     source_document_id,
@@ -116,12 +123,13 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                     constraints_json,
                     created_at
                 FROM retinal_print_plans
-                WHERE patient_id = ?
+                WHERE tenant_id = ? AND patient_id = ?
                 ORDER BY created_at DESC
                 LIMIT 1
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, patientId)
+                statement.setString(1, tenantId)
+                statement.setString(2, patientId)
                 statement.executeQuery().use { rs ->
                     if (rs.next()) rs.toRetinalPlan() else null
                 }
@@ -129,11 +137,12 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
         }
     }
 
-    override fun findRecent(limit: Int): List<RetinalPrintPlan> {
-        return dataSource.connection.use { connection ->
+    override fun findRecent(tenantId: String, limit: Int): List<RetinalPrintPlan> {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     plan_id,
                     patient_id,
                     source_document_id,
@@ -142,11 +151,13 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
                     constraints_json,
                     created_at
                 FROM retinal_print_plans
+                WHERE tenant_id = ?
                 ORDER BY created_at DESC
                 LIMIT ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setInt(1, limit)
+                statement.setString(1, tenantId)
+                statement.setInt(2, limit)
                 statement.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
@@ -161,10 +172,12 @@ class JdbcRetinalPlanStore(private val dataSource: DataSource) : RetinalPlanStor
 
 class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionStore {
     override fun create(session: PrintSession) {
-        dataSource.connection.use { connection ->
+        val tenantId = session.tenantId
+        dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 INSERT INTO print_sessions(
+                    tenant_id,
                     session_id,
                     printer_id,
                     plan_id,
@@ -172,49 +185,53 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                     status,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, session.sessionId)
-                statement.setString(2, session.printerId)
-                statement.setString(3, session.planId)
-                statement.setString(4, session.patientId)
-                statement.setString(5, session.status.name)
-                statement.setTimestamp(6, Timestamp.from(Instant.ofEpochMilli(session.createdAtMs)))
-                statement.setTimestamp(7, Timestamp.from(Instant.ofEpochMilli(session.updatedAtMs)))
+                statement.setString(1, tenantId)
+                statement.setString(2, session.sessionId)
+                statement.setString(3, session.printerId)
+                statement.setString(4, session.planId)
+                statement.setString(5, session.patientId)
+                statement.setString(6, session.status.name)
+                statement.setTimestamp(7, Timestamp.from(Instant.ofEpochMilli(session.createdAtMs)))
+                statement.setTimestamp(8, Timestamp.from(Instant.ofEpochMilli(session.updatedAtMs)))
                 statement.executeUpdate()
             }
         }
     }
 
     override fun updateStatus(
+        tenantId: String,
         sessionId: String,
         status: PrintSessionStatus,
         updatedAtMs: Long,
     ) {
-        dataSource.connection.use { connection ->
+        dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 UPDATE print_sessions
                 SET
                     status = ?,
                     updated_at = ?
-                WHERE session_id = ?
+                WHERE tenant_id = ? AND session_id = ?
                 """.trimIndent(),
             ).use { statement ->
                 statement.setString(1, status.name)
                 statement.setTimestamp(2, Timestamp.from(Instant.ofEpochMilli(updatedAtMs)))
-                statement.setString(3, sessionId)
+                statement.setString(3, tenantId)
+                statement.setString(4, sessionId)
                 statement.executeUpdate()
             }
         }
     }
 
-    override fun findBySessionId(sessionId: String): PrintSession? {
-        return dataSource.connection.use { connection ->
+    override fun findBySessionId(tenantId: String, sessionId: String): PrintSession? {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     session_id,
                     printer_id,
                     plan_id,
@@ -223,10 +240,11 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                     created_at,
                     updated_at
                 FROM print_sessions
-                WHERE session_id = ?
+                WHERE tenant_id = ? AND session_id = ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, sessionId)
+                statement.setString(1, tenantId)
+                statement.setString(2, sessionId)
                 statement.executeQuery().use { rs ->
                     if (rs.next()) rs.toPrintSession() else null
                 }
@@ -234,11 +252,12 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
         }
     }
 
-    override fun findActiveByPrinterId(printerId: String): PrintSession? {
-        return dataSource.connection.use { connection ->
+    override fun findActiveByPrinterId(tenantId: String, printerId: String): PrintSession? {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     session_id,
                     printer_id,
                     plan_id,
@@ -247,13 +266,14 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                     created_at,
                     updated_at
                 FROM print_sessions
-                WHERE printer_id = ?
+                WHERE tenant_id = ? AND printer_id = ?
                   AND status = 'ACTIVE'
                 ORDER BY updated_at DESC
                 LIMIT 1
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, printerId)
+                statement.setString(1, tenantId)
+                statement.setString(2, printerId)
                 statement.executeQuery().use { rs ->
                     if (rs.next()) rs.toPrintSession() else null
                 }
@@ -261,11 +281,12 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
         }
     }
 
-    override fun findActive(limit: Int): List<PrintSession> {
-        return dataSource.connection.use { connection ->
+    override fun findActive(tenantId: String, limit: Int): List<PrintSession> {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     session_id,
                     printer_id,
                     plan_id,
@@ -274,12 +295,13 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
                     created_at,
                     updated_at
                 FROM print_sessions
-                WHERE status = 'ACTIVE'
+                WHERE tenant_id = ? AND status = 'ACTIVE'
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setInt(1, limit)
+                statement.setString(1, tenantId)
+                statement.setInt(2, limit)
                 statement.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
@@ -294,49 +316,56 @@ class JdbcPrintSessionStore(private val dataSource: DataSource) : PrintSessionSt
 
 class JdbcLatencyBreachStore(private val dataSource: DataSource) : LatencyBreachStore {
     override fun append(event: LatencyBreachEvent) {
-        dataSource.connection.use { connection ->
+        val tenantId = event.tenantId
+        dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 INSERT INTO latency_budget_breaches(
+                    tenant_id,
                     printer_id,
                     source,
                     duration_ms,
                     threshold_ms,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
             ).use { statement ->
-                statement.setString(1, event.printerId)
-                statement.setString(2, event.source)
-                statement.setDouble(3, event.durationMs)
-                statement.setLong(4, event.thresholdMs)
-                statement.setTimestamp(5, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
+                statement.setString(1, tenantId)
+                statement.setString(2, event.printerId)
+                statement.setString(3, event.source)
+                statement.setDouble(4, event.durationMs)
+                statement.setLong(5, event.thresholdMs)
+                statement.setTimestamp(6, Timestamp.from(Instant.ofEpochMilli(event.createdAtMs)))
                 statement.executeUpdate()
             }
         }
     }
 
-    override fun recent(limit: Int): List<LatencyBreachEvent> {
-        return dataSource.connection.use { connection ->
+    override fun recent(tenantId: String, limit: Int): List<LatencyBreachEvent> {
+        return dataSource.useTenantConnection(tenantId) { connection ->
             connection.prepareStatement(
                 """
                 SELECT
+                    tenant_id,
                     printer_id,
                     source,
                     duration_ms,
                     threshold_ms,
                     created_at
                 FROM latency_budget_breaches
+                WHERE tenant_id = ?
                 ORDER BY created_at DESC
                 LIMIT ?
                 """.trimIndent(),
             ).use { statement ->
-                statement.setInt(1, limit)
+                statement.setString(1, tenantId)
+                statement.setInt(2, limit)
                 statement.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
                             add(
                                 LatencyBreachEvent(
+                                    tenantId = rs.getString("tenant_id"),
                                     printerId = rs.getString("printer_id"),
                                     source = rs.getString("source"),
                                     durationMs = rs.getDouble("duration_ms"),
@@ -831,6 +860,7 @@ private fun JdbcOutboxEventStore.selectOutboxEventsByIds(
 
 private fun ResultSet.toRetinalPlan(): RetinalPrintPlan {
     return RetinalPrintPlan(
+        tenantId = getString("tenant_id"),
         planId = getString("plan_id"),
         patientId = getString("patient_id"),
         sourceDocumentId = getString("source_document_id"),
@@ -843,6 +873,7 @@ private fun ResultSet.toRetinalPlan(): RetinalPrintPlan {
 
 private fun ResultSet.toPrintSession(): PrintSession {
     return PrintSession(
+        tenantId = getString("tenant_id"),
         sessionId = getString("session_id"),
         printerId = getString("printer_id"),
         planId = getString("plan_id"),

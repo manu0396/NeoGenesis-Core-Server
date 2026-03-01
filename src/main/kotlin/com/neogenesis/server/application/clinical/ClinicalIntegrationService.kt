@@ -24,6 +24,7 @@ class ClinicalIntegrationService(
     private val json = Json { ignoreUnknownKeys = true }
 
     fun ingestFhir(
+        tenantId: String,
         rawJson: String,
         actor: String,
     ): ClinicalDocument {
@@ -34,10 +35,11 @@ class ClinicalIntegrationService(
         val patientReference =
             parsed["subject"]?.jsonObject?.get("reference")?.jsonPrimitive?.content
                 ?: parsed["patient"]?.jsonObject?.get("reference")?.jsonPrimitive?.content
-        requireConsent(patientReference, "CLINICAL_PROCESSING")
+        requireConsent(tenantId, patientReference, "CLINICAL_PROCESSING")
 
         val document =
             ClinicalDocument(
+                tenantId = tenantId,
                 documentType = ClinicalDocumentType.FHIR,
                 externalId = externalId,
                 patientId = patientReference,
@@ -57,6 +59,7 @@ class ClinicalIntegrationService(
     }
 
     fun ingestHl7(
+        tenantId: String,
         rawMessage: String,
         actor: String,
     ): ClinicalDocument {
@@ -68,10 +71,11 @@ class ClinicalIntegrationService(
         val messageType = msh.getOrNull(8).orEmpty()
         val externalId = msh.getOrNull(9)
         val patientId = pid.getOrNull(3)
-        requireConsent(patientId, "CLINICAL_PROCESSING")
+        requireConsent(tenantId, patientId, "CLINICAL_PROCESSING")
 
         val document =
             ClinicalDocument(
+                tenantId = tenantId,
                 documentType = ClinicalDocumentType.HL7,
                 externalId = externalId,
                 patientId = patientId,
@@ -91,6 +95,7 @@ class ClinicalIntegrationService(
     }
 
     fun ingestDicomMetadata(
+        tenantId: String,
         rawJson: String,
         actor: String,
     ): ClinicalDocument {
@@ -98,10 +103,11 @@ class ClinicalIntegrationService(
         val sopInstanceUid = parsed["sopInstanceUid"]?.jsonPrimitive?.content
         val patientId = parsed["patientId"]?.jsonPrimitive?.content
         val modality = parsed["modality"]?.jsonPrimitive?.content.orEmpty()
-        requireConsent(patientId, "CLINICAL_PROCESSING")
+        requireConsent(tenantId, patientId, "CLINICAL_PROCESSING")
 
         val document =
             ClinicalDocument(
+                tenantId = tenantId,
                 documentType = ClinicalDocumentType.DICOM,
                 externalId = sopInstanceUid,
                 patientId = patientId,
@@ -121,14 +127,16 @@ class ClinicalIntegrationService(
     }
 
     fun ingestDicomWebMetadata(
+        tenantId: String,
         patientId: String,
         studyInstanceUid: String,
         metadataJson: String,
         actor: String,
     ): ClinicalDocument {
-        requireConsent(patientId, "CLINICAL_PROCESSING")
+        requireConsent(tenantId, patientId, "CLINICAL_PROCESSING")
         val document =
             ClinicalDocument(
+                tenantId = tenantId,
                 documentType = ClinicalDocumentType.DICOM,
                 externalId = studyInstanceUid,
                 patientId = patientId,
@@ -147,12 +155,13 @@ class ClinicalIntegrationService(
         return document
     }
 
-    fun recent(limit: Int = 100): List<ClinicalDocument> = clinicalDocumentStore.recent(limit)
+    fun recent(tenantId: String, limit: Int = 100): List<ClinicalDocument> = clinicalDocumentStore.recent(tenantId, limit)
 
     fun findByPatientId(
+        tenantId: String,
         patientId: String,
         limit: Int = 100,
-    ): List<ClinicalDocument> = clinicalDocumentStore.findByPatientId(patientId, limit)
+    ): List<ClinicalDocument> = clinicalDocumentStore.findByPatientId(tenantId, patientId, limit)
 
     private fun persistAndAudit(
         document: ClinicalDocument,
@@ -162,6 +171,7 @@ class ClinicalIntegrationService(
         clinicalDocumentStore.append(document)
         auditTrailService.record(
             AuditEvent(
+                tenantId = document.tenantId,
                 actor = actor,
                 action = action,
                 resourceType = "clinical_document",
@@ -186,16 +196,17 @@ class ClinicalIntegrationService(
     }
 
     private fun requireConsent(
+        tenantId: String,
         patientId: String?,
         purpose: String,
     ) {
         if (patientId.isNullOrBlank()) {
-            if (!gdprService.hasActiveConsent("UNKNOWN", purpose)) {
+            if (!gdprService.hasActiveConsent(tenantId, "UNKNOWN", purpose)) {
                 error("GDPR consent check failed: patient reference is required")
             }
             return
         }
-        if (!gdprService.hasActiveConsent(patientId, purpose)) {
+        if (!gdprService.hasActiveConsent(tenantId, patientId, purpose)) {
             error("GDPR consent not granted for patient=$patientId purpose=$purpose")
         }
     }

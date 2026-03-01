@@ -13,6 +13,7 @@ class ClinicalPacsService(
     private val resilienceExecutor: IntegrationResilienceExecutor,
 ) {
     fun importLatestStudy(
+        tenantId: String,
         patientId: String,
         actor: String,
     ): ClinicalDocument? {
@@ -23,6 +24,7 @@ class ClinicalPacsService(
             runCatching {
                 val latest = client.fetchLatestStudyMetadata(patientId) ?: return@runCatching null
                 clinicalIntegrationService.ingestDicomWebMetadata(
+                    tenantId = tenantId,
                     patientId = patientId,
                     studyInstanceUid = latest.studyInstanceUid,
                     metadataJson = latest.metadataJson,

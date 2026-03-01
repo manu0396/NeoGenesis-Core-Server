@@ -10,6 +10,7 @@ enum class ConsentStatus {
 
 @Serializable
 data class GdprConsentRecord(
+    val tenantId: String,
     val id: Long? = null,
     val patientId: String,
     val purpose: String,

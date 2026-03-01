@@ -15,6 +15,7 @@ class RetinalPlanningService(
     private val metricsService: OperationalMetricsService,
 ) {
     fun createPlanFromDicom(
+        tenantId: String,
         patientId: String,
         sourceDocumentId: String?,
         metadata: Map<String, String>,
@@ -50,6 +51,7 @@ class RetinalPlanningService(
 
         val plan =
             RetinalPrintPlan(
+                tenantId = tenantId,
                 planId = "retina-plan-${UUID.randomUUID()}",
                 patientId = patientId,
                 sourceDocumentId = sourceDocumentId,
@@ -61,6 +63,7 @@ class RetinalPlanningService(
         retinalPlanStore.save(plan)
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "retina.plan.create",
                 resourceType = "retinal_plan",
@@ -74,11 +77,11 @@ class RetinalPlanningService(
         return plan
     }
 
-    fun findByPlanId(planId: String): RetinalPrintPlan? = retinalPlanStore.findByPlanId(planId)
+    fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan? = retinalPlanStore.findByPlanId(tenantId, planId)
 
-    fun findRecent(limit: Int = 100): List<RetinalPrintPlan> = retinalPlanStore.findRecent(limit)
+    fun findRecent(tenantId: String, limit: Int = 100): List<RetinalPrintPlan> = retinalPlanStore.findRecent(tenantId, limit)
 
-    fun findLatestByPatientId(patientId: String): RetinalPrintPlan? = retinalPlanStore.findLatestByPatientId(patientId)
+    fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan? = retinalPlanStore.findLatestByPatientId(tenantId, patientId)
 
     private fun retinalLayerName(index: Int): String {
         return when (index) {

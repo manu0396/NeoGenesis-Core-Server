@@ -11,6 +11,7 @@ class DigitalTwinService(
     private val digitalTwinStore: DigitalTwinStore,
 ) {
     fun updateFromTelemetry(
+        tenantId: String,
         telemetry: TelemetryState,
         command: ControlCommand,
         simulatedViability: Float? = null,
@@ -80,6 +81,7 @@ class DigitalTwinService(
 
         val state =
             DigitalTwinState(
+                tenantId = tenantId,
                 printerId = telemetry.printerId,
                 updatedAtMs = telemetry.timestampMs,
                 currentViability = viability,
@@ -93,7 +95,7 @@ class DigitalTwinService(
         return state
     }
 
-    fun findByPrinterId(printerId: String): DigitalTwinState? = digitalTwinStore.findByPrinterId(printerId)
+    fun findByPrinterId(tenantId: String, printerId: String): DigitalTwinState? = digitalTwinStore.findByPrinterId(tenantId, printerId)
 
-    fun findAll(): List<DigitalTwinState> = digitalTwinStore.findAll().sortedByDescending { it.updatedAtMs }
+    fun findAll(tenantId: String): List<DigitalTwinState> = digitalTwinStore.findAll(tenantId).sortedByDescending { it.updatedAtMs }
 }

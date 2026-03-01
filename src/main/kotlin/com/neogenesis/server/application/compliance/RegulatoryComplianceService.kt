@@ -15,6 +15,7 @@ class RegulatoryComplianceService(
     private val metricsService: OperationalMetricsService,
 ) {
     fun createCapa(
+        tenantId: String,
         title: String,
         description: String,
         requirementId: String,
@@ -24,6 +25,7 @@ class RegulatoryComplianceService(
         val created =
             regulatoryStore.createCapa(
                 CapaRecord(
+                    tenantId = tenantId,
                     title = title,
                     description = description,
                     requirementId = requirementId,
@@ -32,6 +34,7 @@ class RegulatoryComplianceService(
             )
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "regulatory.capa.create",
                 resourceType = "capa_record",
@@ -50,14 +53,16 @@ class RegulatoryComplianceService(
     }
 
     fun updateCapaStatus(
+        tenantId: String,
         capaId: Long,
         status: CapaStatus,
         actor: String,
     ): Boolean {
-        val updated = regulatoryStore.updateCapaStatus(capaId, status.name, System.currentTimeMillis())
+        val updated = regulatoryStore.updateCapaStatus(tenantId, capaId, status.name, System.currentTimeMillis())
         if (updated) {
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = actor,
                     action = "regulatory.capa.update",
                     resourceType = "capa_record",
@@ -71,15 +76,17 @@ class RegulatoryComplianceService(
         return updated
     }
 
-    fun listCapas(limit: Int): List<CapaRecord> = regulatoryStore.listCapas(limit)
+    fun listCapas(tenantId: String, limit: Int): List<CapaRecord> = regulatoryStore.listCapas(tenantId, limit)
 
     fun upsertRisk(
+        tenantId: String,
         record: RiskRecord,
         actor: String,
     ) {
-        regulatoryStore.upsertRisk(record)
+        regulatoryStore.upsertRisk(record.copy(tenantId = tenantId))
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "regulatory.risk.upsert",
                 resourceType = "risk_register",
@@ -96,9 +103,10 @@ class RegulatoryComplianceService(
         )
     }
 
-    fun listRisks(limit: Int): List<RiskRecord> = regulatoryStore.listRisks(limit)
+    fun listRisks(tenantId: String, limit: Int): List<RiskRecord> = regulatoryStore.listRisks(tenantId, limit)
 
     fun addDhfArtifact(
+        tenantId: String,
         artifactType: String,
         artifactName: String,
         version: String,
@@ -110,6 +118,7 @@ class RegulatoryComplianceService(
         val artifact =
             regulatoryStore.addDhfArtifact(
                 DhfArtifact(
+                    tenantId = tenantId,
                     artifactType = artifactType,
                     artifactName = artifactName,
                     version = version,
@@ -120,6 +129,7 @@ class RegulatoryComplianceService(
             )
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "regulatory.dhf.add",
                 resourceType = "dhf_artifact",
@@ -136,5 +146,5 @@ class RegulatoryComplianceService(
         return artifact
     }
 
-    fun listDhfArtifacts(limit: Int): List<DhfArtifact> = regulatoryStore.listDhfArtifacts(limit)
+    fun listDhfArtifacts(tenantId: String, limit: Int): List<DhfArtifact> = regulatoryStore.listDhfArtifacts(tenantId, limit)
 }

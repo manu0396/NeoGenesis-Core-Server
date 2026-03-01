@@ -11,6 +11,7 @@ enum class CapaStatus {
 
 @Serializable
 data class CapaRecord(
+    val tenantId: String,
     val id: Long? = null,
     val title: String,
     val description: String,

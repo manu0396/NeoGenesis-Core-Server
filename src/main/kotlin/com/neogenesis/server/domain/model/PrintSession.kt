@@ -13,6 +13,7 @@ enum class PrintSessionStatus {
 
 @Serializable
 data class PrintSession(
+    val tenantId: String,
     val sessionId: String,
     val printerId: String,
     val planId: String,

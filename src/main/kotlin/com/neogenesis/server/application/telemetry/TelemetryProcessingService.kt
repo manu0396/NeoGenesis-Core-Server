@@ -32,17 +32,24 @@ class TelemetryProcessingService(
     private val latencyBudgetService: LatencyBudgetService,
 ) {
     fun process(
+        tenantId: String,
         telemetry: TelemetryState,
         source: String,
         actor: String,
     ): TelemetryProcessingResult {
         val startedNanos = System.nanoTime()
 
-        telemetrySnapshotService.update(telemetry)
-        telemetryEventStore.append(TelemetryEvent(telemetry = telemetry, source = source))
+        telemetrySnapshotService.update(tenantId, telemetry)
+        telemetryEventStore.append(
+            TelemetryEvent(
+                tenantId = tenantId,
+                telemetry = telemetry,
+                source = source,
+            ),
+        )
         metricsService.recordTelemetryIngest(source)
 
-        val baselineCommand = closedLoopControlService.decide(telemetry)
+        val baselineCommand = closedLoopControlService.decide(tenantId, telemetry)
         val simulation = advancedBioSimulationService.simulate(telemetry)
         val command =
             if (
@@ -50,6 +57,7 @@ class TelemetryProcessingService(
                 baselineCommand.actionType != com.neogenesis.server.domain.model.ControlActionType.EMERGENCY_HALT
             ) {
                 ControlCommand(
+                    tenantId = tenantId,
                     commandId = "cmd-${UUID.randomUUID()}",
                     printerId = telemetry.printerId,
                     actionType = com.neogenesis.server.domain.model.ControlActionType.EMERGENCY_HALT,
@@ -63,6 +71,7 @@ class TelemetryProcessingService(
 
         val twinState =
             digitalTwinService.updateFromTelemetry(
+                tenantId = tenantId,
                 telemetry = telemetry,
                 command = command,
                 simulatedViability = simulation.predictedViability,
@@ -71,6 +80,7 @@ class TelemetryProcessingService(
 
         auditTrailService.record(
             AuditEvent(
+                tenantId = tenantId,
                 actor = actor,
                 action = "telemetry.process",
                 resourceType = "printer",
@@ -90,6 +100,7 @@ class TelemetryProcessingService(
         val durationNanos = System.nanoTime() - startedNanos
         metricsService.recordProcessingLatency(durationNanos)
         latencyBudgetService.recordIfBreached(
+            tenantId = tenantId,
             printerId = telemetry.printerId,
             source = source,
             durationNanos = durationNanos,

@@ -6,11 +6,11 @@ import com.neogenesis.server.domain.model.TelemetryState
 import java.util.UUID
 
 interface TelemetrySafetyPolicy {
-    fun decide(telemetry: TelemetryState): ControlCommand
+    fun decide(tenantId: String, telemetry: TelemetryState): ControlCommand
 }
 
 class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
-    override fun decide(telemetry: TelemetryState): ControlCommand {
+    override fun decide(tenantId: String, telemetry: TelemetryState): ControlCommand {
         if (
             telemetry.isCriticalViability() ||
             telemetry.isCriticalTemperature() ||
@@ -20,6 +20,7 @@ class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
             telemetry.bioInkPh > 7.8f
         ) {
             return ControlCommand(
+                tenantId = tenantId,
                 commandId = commandId(),
                 printerId = telemetry.printerId,
                 actionType = ControlActionType.EMERGENCY_HALT,
@@ -43,6 +44,7 @@ class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
 
         if (pressureAdjust != 0.0f || speedAdjust != 0.0f) {
             return ControlCommand(
+                tenantId = tenantId,
                 commandId = commandId(),
                 printerId = telemetry.printerId,
                 actionType = ControlActionType.ADJUST,
@@ -53,6 +55,7 @@ class DefaultTelemetrySafetyPolicy : TelemetrySafetyPolicy {
         }
 
         return ControlCommand(
+            tenantId = tenantId,
             commandId = commandId(),
             printerId = telemetry.printerId,
             actionType = ControlActionType.MAINTAIN,

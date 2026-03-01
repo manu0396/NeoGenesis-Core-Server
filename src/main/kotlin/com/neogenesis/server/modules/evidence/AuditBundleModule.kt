@@ -35,7 +35,7 @@ fun Route.auditBundleModule(
                 throw ApiException("invalid_request", "jobId is required", HttpStatusCode.BadRequest)
             }
             val job =
-                jobRepository.get(jobId)
+                jobRepository.get(tenantId, jobId)
                     ?: throw ApiException("job_not_found", "Job not found", HttpStatusCode.NotFound)
             if (!job.tenantId.isNullOrBlank() && job.tenantId != tenantId) {
                 throw ApiException("tenant_mismatch", "tenant mismatch", HttpStatusCode.Forbidden)
@@ -53,6 +53,7 @@ fun Route.auditBundleModule(
 
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "audit.bundle.export",
                     resourceType = "audit_bundle",

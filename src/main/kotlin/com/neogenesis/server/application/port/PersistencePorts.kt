@@ -21,29 +21,36 @@ import com.neogenesis.server.domain.model.TelemetryEvent
 interface TelemetryEventStore {
     fun append(event: TelemetryEvent)
 
-    fun recent(limit: Int = 100): List<TelemetryEvent>
+    fun recent(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<TelemetryEvent>
 }
 
 interface ControlCommandStore {
     fun append(event: ControlCommandEvent)
 
-    fun recent(limit: Int = 100): List<ControlCommandEvent>
+    fun recent(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<ControlCommandEvent>
 }
 
 interface DigitalTwinStore {
     fun upsert(state: DigitalTwinState)
 
-    fun findByPrinterId(printerId: String): DigitalTwinState?
+    fun findByPrinterId(tenantId: String, printerId: String): DigitalTwinState?
 
-    fun findAll(): List<DigitalTwinState>
+    fun findAll(tenantId: String): List<DigitalTwinState>
 }
 
 interface ClinicalDocumentStore {
     fun append(document: ClinicalDocument)
 
-    fun recent(limit: Int = 100): List<ClinicalDocument>
+    fun recent(tenantId: String, limit: Int = 100): List<ClinicalDocument>
 
     fun findByPatientId(
+        tenantId: String,
         patientId: String,
         limit: Int = 100,
     ): List<ClinicalDocument>
@@ -52,41 +59,45 @@ interface ClinicalDocumentStore {
 interface AuditEventStore {
     fun append(event: AuditEvent)
 
-    fun recent(limit: Int = 200): List<AuditEvent>
+    fun recent(tenantId: String, limit: Int = 200): List<AuditEvent>
 
-    fun verifyChain(limit: Int = 10_000): AuditChainVerification
+    fun verifyChain(tenantId: String, limit: Int = 10_000): AuditChainVerification
 }
 
 interface RetinalPlanStore {
     fun save(plan: RetinalPrintPlan)
 
-    fun findByPlanId(planId: String): RetinalPrintPlan?
+    fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan?
 
-    fun findLatestByPatientId(patientId: String): RetinalPrintPlan?
+    fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan?
 
-    fun findRecent(limit: Int = 100): List<RetinalPrintPlan>
+    fun findRecent(tenantId: String, limit: Int = 100): List<RetinalPrintPlan>
 }
 
 interface PrintSessionStore {
     fun create(session: PrintSession)
 
     fun updateStatus(
+        tenantId: String,
         sessionId: String,
         status: PrintSessionStatus,
         updatedAtMs: Long,
     )
 
-    fun findBySessionId(sessionId: String): PrintSession?
+    fun findBySessionId(tenantId: String, sessionId: String): PrintSession?
 
-    fun findActiveByPrinterId(printerId: String): PrintSession?
+    fun findActiveByPrinterId(tenantId: String, printerId: String): PrintSession?
 
-    fun findActive(limit: Int = 100): List<PrintSession>
+    fun findActive(tenantId: String, limit: Int = 100): List<PrintSession>
 }
 
 interface LatencyBreachStore {
     fun append(event: LatencyBreachEvent)
 
-    fun recent(limit: Int = 200): List<LatencyBreachEvent>
+    fun recent(
+        tenantId: String,
+        limit: Int = 200,
+    ): List<LatencyBreachEvent>
 }
 
 interface OutboxEventStore {
@@ -125,17 +136,24 @@ interface GdprStore {
     fun appendConsent(record: GdprConsentRecord)
 
     fun latestConsent(
+        tenantId: String,
         patientId: String,
         purpose: String,
     ): GdprConsentRecord?
 
     fun appendErasure(record: GdprErasureRecord)
 
-    fun recentErasures(limit: Int = 100): List<GdprErasureRecord>
+    fun recentErasures(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<GdprErasureRecord>
 
-    fun anonymizeClinicalDocuments(patientId: String): Int
+    fun anonymizeClinicalDocuments(
+        tenantId: String,
+        patientId: String,
+    ): Int
 
-    fun anonymizeExpiredClinicalDocuments(): Int
+    fun anonymizeExpiredClinicalDocuments(tenantId: String): Int
 }
 
 interface RequestIdempotencyStore {
@@ -156,9 +174,13 @@ enum class IdempotencyRememberResult {
 interface RegulatoryStore {
     fun createCapa(record: CapaRecord): CapaRecord
 
-    fun listCapas(limit: Int = 100): List<CapaRecord>
+    fun listCapas(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<CapaRecord>
 
     fun updateCapaStatus(
+        tenantId: String,
         capaId: Long,
         status: String,
         updatedAtMs: Long,
@@ -166,9 +188,15 @@ interface RegulatoryStore {
 
     fun upsertRisk(record: RiskRecord)
 
-    fun listRisks(limit: Int = 100): List<RiskRecord>
+    fun listRisks(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<RiskRecord>
 
     fun addDhfArtifact(artifact: DhfArtifact): DhfArtifact
 
-    fun listDhfArtifacts(limit: Int = 100): List<DhfArtifact>
+    fun listDhfArtifacts(
+        tenantId: String,
+        limit: Int = 100,
+    ): List<DhfArtifact>
 }

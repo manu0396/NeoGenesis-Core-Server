@@ -17,9 +17,11 @@ import kotlin.test.assertEquals
 class ClosedLoopControlServiceTest {
     @Test
     fun `emits emergency halt when morphology exceeds retinal threshold`() {
+        val tenantId = "test-tenant"
         val sessionStore =
             FakePrintSessionStore(
                 PrintSession(
+                    tenantId = tenantId,
                     sessionId = "s1",
                     printerId = "printer-1",
                     planId = "plan-1",
@@ -30,6 +32,7 @@ class ClosedLoopControlServiceTest {
         val planStore =
             FakeRetinalPlanStore(
                 RetinalPrintPlan(
+                    tenantId = tenantId,
                     planId = "plan-1",
                     patientId = "p1",
                     sourceDocumentId = "d1",
@@ -62,16 +65,18 @@ class ClosedLoopControlServiceTest {
 
         val command =
             service.decide(
-                TelemetryState(
-                    printerId = "printer-1",
-                    timestampMs = 1,
-                    nozzleTempCelsius = 36.8f,
-                    extrusionPressureKPa = 110f,
-                    cellViabilityIndex = 0.95f,
-                    bioInkPh = 7.35f,
-                    nirIiTempCelsius = 37.2f,
-                    morphologicalDefectProbability = 0.2f,
-                ),
+                tenantId = tenantId,
+                telemetry =
+                    TelemetryState(
+                        printerId = "printer-1",
+                        timestampMs = 1,
+                        nozzleTempCelsius = 36.8f,
+                        extrusionPressureKPa = 110f,
+                        cellViabilityIndex = 0.95f,
+                        bioInkPh = 7.35f,
+                        nirIiTempCelsius = 37.2f,
+                        morphologicalDefectProbability = 0.2f,
+                    ),
             )
 
         assertEquals(ControlActionType.EMERGENCY_HALT, command.actionType)
@@ -83,16 +88,20 @@ class ClosedLoopControlServiceTest {
         override fun create(session: PrintSession) = Unit
 
         override fun updateStatus(
+            tenantId: String,
             sessionId: String,
             status: PrintSessionStatus,
             updatedAtMs: Long,
         ) = Unit
 
-        override fun findBySessionId(sessionId: String): PrintSession? = active?.takeIf { it.sessionId == sessionId }
+        override fun findBySessionId(tenantId: String, sessionId: String): PrintSession? =
+            active?.takeIf { it.tenantId == tenantId && it.sessionId == sessionId }
 
-        override fun findActiveByPrinterId(printerId: String): PrintSession? = active?.takeIf { it.printerId == printerId }
+        override fun findActiveByPrinterId(tenantId: String, printerId: String): PrintSession? =
+            active?.takeIf { it.tenantId == tenantId && it.printerId == printerId }
 
-        override fun findActive(limit: Int): List<PrintSession> = listOfNotNull(active)
+        override fun findActive(tenantId: String, limit: Int): List<PrintSession> =
+            listOfNotNull(active).filter { it.tenantId == tenantId }
     }
 
     private class FakeRetinalPlanStore(
@@ -100,10 +109,13 @@ class ClosedLoopControlServiceTest {
     ) : RetinalPlanStore {
         override fun save(plan: RetinalPrintPlan) = Unit
 
-        override fun findByPlanId(planId: String): RetinalPrintPlan? = plan.takeIf { it.planId == planId }
+        override fun findByPlanId(tenantId: String, planId: String): RetinalPrintPlan? =
+            plan.takeIf { it.tenantId == tenantId && it.planId == planId }
 
-        override fun findLatestByPatientId(patientId: String): RetinalPrintPlan? = plan.takeIf { it.patientId == patientId }
+        override fun findLatestByPatientId(tenantId: String, patientId: String): RetinalPrintPlan? =
+            plan.takeIf { it.tenantId == tenantId && it.patientId == patientId }
 
-        override fun findRecent(limit: Int): List<RetinalPrintPlan> = listOf(plan)
+        override fun findRecent(tenantId: String, limit: Int): List<RetinalPrintPlan> =
+            listOf(plan).filter { it.tenantId == tenantId }
     }
 }

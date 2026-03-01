@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class DhfArtifact(
+    val tenantId: String,
     val id: Long? = null,
     val artifactType: String,
     val artifactName: String,

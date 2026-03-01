@@ -35,6 +35,7 @@ fun Route.adminWebModule(
             requireTenantMatch(principal, tenantId)
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "admin.web.view",
                     resourceType = "admin_web",
@@ -77,6 +78,7 @@ fun Route.adminWebModule(
             requireTenantMatch(principal, tenantId)
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "admin.web.status",
                     resourceType = "admin_web",
@@ -114,6 +116,7 @@ fun Route.adminWebModule(
             }
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "admin.web.oidc.login",
                     resourceType = "admin_web",
@@ -150,6 +153,7 @@ fun Route.adminWebModule(
             requireTenantMatch(principal, tenantId)
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "admin.web.gateways.list",
                     resourceType = "admin_web",
@@ -178,6 +182,7 @@ fun Route.adminWebModule(
             requireTenantMatch(principal, tenantId)
             auditTrailService.record(
                 AuditEvent(
+                    tenantId = tenantId,
                     actor = call.actor(),
                     action = "admin.web.gateways.export",
                     resourceType = "admin_web",
