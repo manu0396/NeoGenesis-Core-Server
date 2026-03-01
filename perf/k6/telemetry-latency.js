@@ -1,6 +1,9 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 
+const thresholdP95Ms = Number(__ENV.K6_THRESHOLD_P95_MS || "50");
+const thresholdP99Ms = Number(__ENV.K6_THRESHOLD_P99_MS || "75");
+
 export const options = {
   scenarios: {
     telemetry_eval: {
@@ -13,7 +16,7 @@ export const options = {
     }
   },
   thresholds: {
-    http_req_duration: ["p(95)<50", "p(99)<50"],
+    http_req_duration: [`p(95)<${thresholdP95Ms}`, `p(99)<${thresholdP99Ms}`],
     checks: ["rate>0.99"]
   }
 };

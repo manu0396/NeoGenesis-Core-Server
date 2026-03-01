@@ -78,6 +78,7 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host-jvm:$ktorVersion")
+    testImplementation("io.grpc:grpc-inprocess:$grpcVersion")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
 
     constraints {
