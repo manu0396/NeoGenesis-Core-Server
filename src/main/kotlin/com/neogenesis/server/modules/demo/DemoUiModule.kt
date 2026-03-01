@@ -18,8 +18,6 @@ import io.ktor.server.request.receive
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
-import io.ktor.server.request.receive
-import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -47,6 +45,14 @@ fun Route.demoUiModule(
         }
 
         post("/api/v1/regenops/protocols") {
+            call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR)
+            val tenantId = call.requireTenantId()
+            call.requireCorrelationId()
+            val request = call.receive<CreateProtocolRequest>()
+            val created = DemoProtocolStore.create(tenantId, request)
+            call.respond(created)
+        }
+
         post("/api/v1/regenops/protocols/{protocolId}/status") {
             call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR)
             val tenantId = call.requireTenantId()
@@ -56,15 +62,6 @@ fun Route.demoUiModule(
             val request = call.receive<UpdateProtocolStatusRequest>()
             val updated = DemoProtocolStore.updateStatus(tenantId, protocolId, request.status)
             call.respond(updated)
-        }
-
-        
-            call.enforceRole(CanonicalRole.ADMIN, CanonicalRole.OPERATOR)
-            val tenantId = call.requireTenantId()
-            call.requireCorrelationId()
-            val request = call.receive<CreateProtocolRequest>()
-            val created = DemoProtocolStore.create(tenantId, request)
-            call.respond(created)
         }
 
         get("/api/v1/metrics/reproducibility-score") {
@@ -222,7 +219,6 @@ data class ProtocolSummaryResponse(
     val summary: String,
     val latestVersion: Int,
     val status: String? = null,
-    val status: String? = null,
     val resultSummary: String? = null,
     val lastOutcome: String? = null,
     val resultMetrics: Map<String, String> = emptyMap(),
@@ -247,6 +243,11 @@ data class CreateProtocolRequest(
     val lastRunTimeline: List<String> = emptyList(),
     val evidenceArtifacts: List<String> = emptyList(),
     val lastRunId: String? = null,
+)
+
+@Serializable
+data class UpdateProtocolStatusRequest(
+    val status: String,
 )
 
 @Serializable
@@ -402,6 +403,18 @@ private object DemoProtocolStore {
         )
         list.add(0, created)
         return created
+    }
+
+    fun updateStatus(tenantId: String, protocolId: String, status: String): ProtocolSummaryResponse {
+        val list = protocolsByTenant.getOrPut(tenantId) { mutableListOf() }
+        val index = list.indexOfFirst { it.protocolId == protocolId }
+        if (index == -1) {
+            throw ApiException("protocol_not_found", "Protocol not found", HttpStatusCode.NotFound)
+        }
+        val current = list[index]
+        val updated = current.copy(status = status)
+        list[index] = updated
+        return updated
     }
 }
 
