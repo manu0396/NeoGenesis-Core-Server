@@ -12,7 +12,13 @@ class MetricsServiceTest {
     fun `metrics score requires headers`() =
         testApplication {
             application {
-                metricsModule(MetricsConfig(enabled = true, port = 0))
+                metricsModule(
+                    MetricsConfig(
+                        enabled = true,
+                        port = 0,
+                        storageDir = "build/tmp/test-metrics-service",
+                    ),
+                )
             }
 
             val missing =
