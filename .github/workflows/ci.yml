@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -13,5 +16,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - name: Gradle build and test
-        run: ./gradlew build test
+          cache: gradle
+      - name: Gradle test
+        run: ./gradlew test --no-daemon
