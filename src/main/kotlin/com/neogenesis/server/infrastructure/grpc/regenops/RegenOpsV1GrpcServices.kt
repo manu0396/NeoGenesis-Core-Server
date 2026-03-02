@@ -21,6 +21,8 @@ import com.neogenesis.server.application.error.ConflictException
 import com.neogenesis.server.application.regenops.RegenOpsService
 import com.neogenesis.server.application.regenops.RegenRunEvent
 import com.neogenesis.server.application.regenops.RegenTelemetryPoint
+import com.neogenesis.server.domain.device.Capability
+import com.neogenesis.server.infrastructure.grpc.GrpcCapabilityGuard
 import com.neogenesis.server.infrastructure.grpc.GrpcPrincipal
 import com.neogenesis.server.infrastructure.grpc.requireGrpcGrant
 import io.grpc.Status
@@ -35,6 +37,7 @@ class RegenProtocolV1GrpcService(
 ) : ProtocolServiceGrpcKt.ProtocolServiceCoroutineImplBase() {
     override suspend fun listProtocols(request: ListProtocolsRequest): ListProtocolsResponse {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.READ_ONLY_DASHBOARD)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             val tenantId = requireTenant(principal)
             val protocols = service.listProtocols(tenantId = tenantId, limit = 100)
@@ -64,6 +67,7 @@ class RegenProtocolV1GrpcService(
 
     override suspend fun publishVersion(request: PublishVersionRequest): ProtocolVersion {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PROTOCOL_EDIT)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             val tenantId = requireTenant(principal)
             val requestedVersionId = request.versionId.trim()
@@ -89,6 +93,7 @@ class RegenRunV1GrpcService(
 ) : RunServiceGrpcKt.RunServiceCoroutineImplBase() {
     override suspend fun startRun(request: StartRunRequest): RunRef {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PRINT_CONTROL)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             val tenantId = requireTenant(principal)
             val version = parseVersionId(request.versionId) ?: 1
@@ -110,6 +115,7 @@ class RegenRunV1GrpcService(
 
     override suspend fun pauseRun(request: PauseRunRequest): RunRef {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PRINT_CONTROL)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             val tenantId = requireTenant(principal)
             val updated =
@@ -128,6 +134,7 @@ class RegenRunV1GrpcService(
 
     override suspend fun abortRun(request: AbortRunRequest): RunRef {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PRINT_CONTROL)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             val tenantId = requireTenant(principal)
             val updated =
@@ -146,6 +153,7 @@ class RegenRunV1GrpcService(
 
     override suspend fun getRun(request: GetRunRequest): RunRef {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.QC_REVIEW)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             val tenantId = requireTenant(principal)
             val run = service.getRun(tenantId = tenantId, runId = request.runId)
@@ -157,6 +165,7 @@ class RegenRunV1GrpcService(
     }
 
     override fun streamRunEvents(request: GetRunRequest): Flow<RunEvent> {
+        GrpcCapabilityGuard.requireCapability(Capability.QC_REVIEW)
         val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor", "gateway")
         val tenantId = requireTenant(principal)
         val events = service.streamRunEvents(tenantId, request.runId, 0, 0, 250)
@@ -164,6 +173,7 @@ class RegenRunV1GrpcService(
     }
 
     override fun streamTelemetry(request: GetRunRequest): Flow<TelemetryFrame> {
+        GrpcCapabilityGuard.requireCapability(Capability.LIVE_MONITOR)
         val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor", "gateway")
         val tenantId = requireTenant(principal)
         val telemetry = service.streamTelemetry(tenantId, request.runId, 0, 0, 250)

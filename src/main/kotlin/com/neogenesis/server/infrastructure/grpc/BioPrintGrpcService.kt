@@ -7,6 +7,7 @@ import com.neogenesis.server.application.error.BadRequestException
 import com.neogenesis.server.application.error.ConflictException
 import com.neogenesis.server.application.error.DependencyUnavailableException
 import com.neogenesis.server.application.telemetry.TelemetryProcessingService
+import com.neogenesis.server.domain.device.Capability
 import com.neogenesis.server.domain.model.ControlActionType
 import com.neogenesis.server.domain.model.ControlCommand
 import com.neogenesis.server.domain.model.TelemetryState
@@ -19,6 +20,7 @@ class BioPrintGrpcService(
     private val telemetryProcessingService: TelemetryProcessingService,
 ) : BioPrintServiceGrpcKt.BioPrintServiceCoroutineImplBase() {
     override fun streamTelemetryAndControl(requests: Flow<PrinterTelemetry>): Flow<KinematicCommand> {
+        GrpcCapabilityGuard.requireCapability(Capability.PRINT_CONTROL)
         val principal = GrpcAuthContextKeys.principal.get() ?: GrpcPrincipal("system", setOf("system"), "default", null)
         val tenantId = principal.tenantId ?: "default"
 

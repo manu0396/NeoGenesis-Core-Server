@@ -43,6 +43,8 @@ import com.neogenesis.server.application.error.ConflictException
 import com.neogenesis.server.application.regenops.RegenOpsService
 import com.neogenesis.server.application.regenops.RegenRunEvent
 import com.neogenesis.server.application.regenops.RegenTelemetryPoint
+import com.neogenesis.server.domain.device.Capability
+import com.neogenesis.server.infrastructure.grpc.GrpcCapabilityGuard
 import com.neogenesis.server.infrastructure.grpc.GrpcPrincipal
 import com.neogenesis.server.infrastructure.grpc.requireGrpcGrant
 import io.grpc.Status
@@ -56,6 +58,7 @@ class RegenProtocolGrpcService(
 ) : ProtocolServiceGrpcKt.ProtocolServiceCoroutineImplBase() {
     override suspend fun createDraft(request: CreateDraftRequest): ProtocolDraftRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PROTOCOL_EDIT)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             service.createDraft(
                 tenantId = resolveTenant(request.tenantId, principal),
@@ -69,6 +72,7 @@ class RegenProtocolGrpcService(
 
     override suspend fun updateDraft(request: UpdateDraftRequest): ProtocolDraftRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PROTOCOL_EDIT)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             service.updateDraft(
                 tenantId = resolveTenant(request.tenantId, principal),
@@ -82,6 +86,7 @@ class RegenProtocolGrpcService(
 
     override suspend fun publishVersion(request: PublishVersionRequest): ProtocolVersionRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PROTOCOL_EDIT)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             val tenantId = resolveTenant(request.tenantId, principal)
 
@@ -97,6 +102,7 @@ class RegenProtocolGrpcService(
 
     override suspend fun listProtocols(request: ListProtocolsRequest): ListProtocolsResponse {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.READ_ONLY_DASHBOARD)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             val protocols =
                 service.listProtocols(
@@ -111,6 +117,7 @@ class RegenProtocolGrpcService(
 
     override suspend fun getProtocolVersion(request: GetProtocolVersionRequest): ProtocolVersionRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.READ_ONLY_DASHBOARD)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             service.getProtocolVersion(
                 tenantId = resolveTenant(request.tenantId, principal),
@@ -122,6 +129,7 @@ class RegenProtocolGrpcService(
 
     override suspend fun diffVersions(request: DiffVersionsRequest): DiffVersionsResponse {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.READ_ONLY_DASHBOARD)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             val diff =
                 service.diffVersions(
@@ -144,6 +152,7 @@ class RegenRunGrpcService(
 ) : RunServiceGrpcKt.RunServiceCoroutineImplBase() {
     override suspend fun startRun(request: StartRunRequest): RunRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PRINT_CONTROL)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             service.startRun(
                 tenantId = resolveTenant(request.tenantId, principal),
@@ -158,6 +167,7 @@ class RegenRunGrpcService(
 
     override suspend fun pauseRun(request: RunControlRequest): RunRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PRINT_CONTROL)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             service.pauseRun(
                 tenantId = resolveTenant(request.tenantId, principal),
@@ -170,6 +180,7 @@ class RegenRunGrpcService(
 
     override suspend fun abortRun(request: RunControlRequest): RunRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.PRINT_CONTROL)
             val principal = requireGrpcGrant("regenops_operator", "admin", "operator")
             service.abortRun(
                 tenantId = resolveTenant(request.tenantId, principal),
@@ -182,6 +193,7 @@ class RegenRunGrpcService(
 
     override suspend fun getRun(request: GetRunRequest): RunRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.QC_REVIEW)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             service.getRun(
                 tenantId = resolveTenant(request.tenantId, principal),
@@ -191,6 +203,7 @@ class RegenRunGrpcService(
     }
 
     override fun streamRunEvents(request: StreamRunEventsRequest): Flow<RunEventRecord> {
+        GrpcCapabilityGuard.requireCapability(Capability.QC_REVIEW)
         val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor", "gateway")
         val tenantId = resolveTenant(request.tenantId, principal)
         val events = service.streamRunEvents(tenantId, request.runId, request.sinceMs, request.sinceSeq, request.limit)
@@ -198,6 +211,7 @@ class RegenRunGrpcService(
     }
 
     override fun streamTelemetry(request: StreamTelemetryRequest): Flow<TelemetryRecord> {
+        GrpcCapabilityGuard.requireCapability(Capability.LIVE_MONITOR)
         val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor", "gateway")
         val tenantId = resolveTenant(request.tenantId, principal)
         val telemetry = service.streamTelemetry(tenantId, request.runId, request.sinceMs, request.sinceSeq, request.limit)
@@ -210,6 +224,7 @@ class RegenGatewayGrpcService(
 ) : com.neogenesis.grpc.GatewayServiceGrpcKt.GatewayServiceCoroutineImplBase() {
     override suspend fun registerGateway(request: RegisterGatewayRequest): GatewayRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.ADMIN_SETTINGS)
             val principal = requireGrpcGrant("gateway", "regenops_operator", "admin")
             requireGatewayMutualTls(principal)
             val certificateSerial = resolveGatewayCertificateSerial(request.certificateSerial, principal)
@@ -224,6 +239,7 @@ class RegenGatewayGrpcService(
 
     override suspend fun heartbeat(request: HeartbeatRequest): GatewayRecord {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.ADMIN_SETTINGS)
             val principal = requireGrpcGrant("gateway", "regenops_operator", "admin")
             requireGatewayMutualTls(principal)
             val certificateSerial = resolveGatewayCertificateSerial(request.certificateSerial, principal)
@@ -237,6 +253,7 @@ class RegenGatewayGrpcService(
 
     override suspend fun pushRunEvents(request: PushRunEventsRequest): GatewayAck {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.LIVE_MONITOR)
             val principal = requireGrpcGrant("gateway", "regenops_operator", "admin")
             requireGatewayMutualTls(principal)
             val tenantId = resolveTenant(request.tenantId, principal)
@@ -266,6 +283,7 @@ class RegenGatewayGrpcService(
 
     override suspend fun pushTelemetry(request: PushTelemetryRequest): GatewayAck {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.LIVE_MONITOR)
             val principal = requireGrpcGrant("gateway", "regenops_operator", "admin")
             requireGatewayMutualTls(principal)
             val tenantId = resolveTenant(request.tenantId, principal)
@@ -297,6 +315,7 @@ class RegenGatewayGrpcService(
 
     override suspend fun fetchConfig(request: FetchConfigRequest): GatewayConfig {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.ADMIN_SETTINGS)
             val principal = requireGrpcGrant("gateway", "regenops_operator", "admin")
             requireGatewayMutualTls(principal)
             val config = service.fetchConfig(resolveTenant(request.tenantId, principal), request.gatewayId)
@@ -324,6 +343,7 @@ class RegenMetricsGrpcService(
 ) : MetricsServiceGrpcKt.MetricsServiceCoroutineImplBase() {
     override suspend fun getReproducibilityScore(request: GetReproducibilityScoreRequest): ReproducibilityScoreResponse {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.QC_REVIEW)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             val score = service.getReproducibilityScore(resolveTenant(request.tenantId, principal), request.runId)
             ReproducibilityScoreResponse.newBuilder()
@@ -339,6 +359,7 @@ class RegenMetricsGrpcService(
 
     override suspend fun listDriftAlerts(request: ListDriftAlertsRequest): ListDriftAlertsResponse {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.QC_REVIEW)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             val alerts = service.listDriftAlerts(resolveTenant(request.tenantId, principal), request.runId, request.limit)
             ListDriftAlertsResponse.newBuilder()
@@ -360,6 +381,7 @@ class RegenMetricsGrpcService(
 
     override suspend fun exportRunReport(request: ExportRunReportRequest): RunReportResponse {
         return grpcCall {
+            GrpcCapabilityGuard.requireCapability(Capability.QC_REVIEW)
             val principal = requireGrpcGrant("regenops_operator", "regenops_auditor", "admin", "auditor")
             val report = service.exportRunReport(resolveTenant(request.tenantId, principal), request.runId)
             RunReportResponse.newBuilder()

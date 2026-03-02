@@ -1,4 +1,4 @@
-﻿import com.google.protobuf.gradle.*
+import com.google.protobuf.gradle.*
 
 plugins {
     kotlin("jvm") version "2.0.21"
@@ -93,3 +93,4 @@ publishing {
         mavenLocal()
     }
 }
+

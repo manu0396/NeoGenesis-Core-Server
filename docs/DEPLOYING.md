@@ -23,6 +23,11 @@ Primary production artifact: **Shadow JAR** (`build/libs/*-all.jar`). Container 
   - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO`
   - `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`, `STRIPE_PORTAL_RETURN_URL`
 
+## Device Policy
+- `device-policy.yaml` in `src/main/resources/` defines tier capability limits.
+- If device headers are missing, the server defaults to `DeviceClass.UNKNOWN` + `Tier2` safe mode.
+- Update policy by redeploying the service (policy is loaded at startup).
+
 ## TLS Termination Model
 - HTTP: terminate TLS at ingress/reverse proxy (recommended). The app expects plain HTTP behind the proxy.
 - gRPC: terminate with **direct mTLS** at the gRPC server (configured via `neogenesis.security.mtls.grpc.*`).

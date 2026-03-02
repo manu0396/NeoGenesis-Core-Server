@@ -38,3 +38,11 @@ All notable changes to this project will be documented in this file.
 ### Migration Notes
 - Contracts artifact coordinates remain `com.neogenesis:neogenesis-contracts:1.0.0`.
 - Gateway is feature-flagged and can be deployed independently of the core server.
+
+## [1.0.0] - 2026-03-02
+### Added
+- Device Support Tiers v1.0.0 with device policy YAML, HTTP + gRPC policy endpoints, and device header parsing.
+- Default-deny device capability enforcement for mutating endpoints with explicit mapping table.
+- gRPC device metadata enforcement across RegenOps + BioPrint services.
+- Device-tier contract tests and enforcement tests (Tier2/Tier3 restrictions).
+- Pilot install checklist and deployment documentation updates.

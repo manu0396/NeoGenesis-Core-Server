@@ -1,4 +1,4 @@
-﻿package com.neogenesis.server
+package com.neogenesis.server
 
 import com.neogenesis.server.application.AuditTrailService
 import com.neogenesis.server.application.ControlDecisionService
@@ -36,7 +36,10 @@ import com.neogenesis.server.infrastructure.clinical.Hl7MllpClient
 import com.neogenesis.server.infrastructure.config.AppConfig
 import com.neogenesis.server.infrastructure.config.ProductionReadinessValidator
 import com.neogenesis.server.infrastructure.grpc.BioPrintGrpcService
+import com.neogenesis.server.infrastructure.grpc.DevicePolicyGrpcService
+import com.neogenesis.server.infrastructure.grpc.GrpcCapabilityGuard
 import com.neogenesis.server.infrastructure.grpc.GrpcCorrelationTracingInterceptor
+import com.neogenesis.server.infrastructure.grpc.GrpcDeviceContext
 import com.neogenesis.server.infrastructure.grpc.GrpcJwtAuthInterceptor
 import com.neogenesis.server.infrastructure.grpc.GrpcServerFactory
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenGatewayGrpcService
@@ -47,6 +50,7 @@ import com.neogenesis.server.infrastructure.grpc.regenops.RegenProtocolV1GrpcSer
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenRunV1GrpcService
 import com.neogenesis.server.infrastructure.observability.OpenTelemetrySetup
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
+import com.neogenesis.server.infrastructure.device.DevicePolicyRepository
 import com.neogenesis.server.infrastructure.persistence.AuditLogRepository
 import com.neogenesis.server.infrastructure.persistence.BillingEventRepository
 import com.neogenesis.server.infrastructure.persistence.BillingPlanRepository
@@ -74,6 +78,8 @@ import com.neogenesis.server.infrastructure.security.JwtVerifierFactory
 import com.neogenesis.server.infrastructure.security.NeoGenesisPrincipal
 import com.neogenesis.server.infrastructure.security.SecretResolver
 import com.neogenesis.server.infrastructure.security.SecurityPluginException
+import com.neogenesis.server.infrastructure.security.DeviceCapabilityEnforcement
+import com.neogenesis.server.infrastructure.security.defaultDeviceCapabilityMappings
 import com.neogenesis.server.infrastructure.security.configureAuthentication
 import com.neogenesis.server.infrastructure.security.configureHttpProxyMutualTlsValidation
 import com.neogenesis.server.infrastructure.security.configureRateLimiting
@@ -111,6 +117,7 @@ import com.neogenesis.server.presentation.http.digitalTwinRoutes
 import com.neogenesis.server.presentation.http.gdprRoutes
 import com.neogenesis.server.presentation.http.healthRoutes
 import com.neogenesis.server.presentation.http.printSessionRoutes
+import com.neogenesis.server.presentation.http.devicePolicyRoutes
 import com.neogenesis.server.presentation.http.qualityRoutes
 import com.neogenesis.server.presentation.http.regulatoryRoutes
 import com.neogenesis.server.presentation.http.retinaRoutes
@@ -211,6 +218,8 @@ fun Application.module() {
     billingService.seedPlans()
     val auditEventStore = JdbcAuditEventStore(dataSource)
     val auditTrailService = AuditTrailService(auditEventStore, operationalMetrics)
+    GrpcCapabilityGuard.auditTrailService = auditTrailService
+    val devicePolicyRepository = DevicePolicyRepository()
     val commercialRepository = CommercialRepository(dataSource)
     val commercialService = CommercialService(commercialRepository, auditTrailService)
 
@@ -320,6 +329,14 @@ fun Application.module() {
             allowHeader(HttpHeaders.Authorization)
             allowHeader(HttpHeaders.ContentType)
             allowHeader(HttpHeaders.XRequestId)
+            allowHeader("X-Device-Id")
+            allowHeader("X-Device-Class")
+            allowHeader("X-Device-Tier")
+            allowHeader("X-App-Version")
+            allowHeader("X-Platform")
+            allowHeader("X-OS-Version")
+            allowHeader("X-Device-Model")
+            allowHeader("X-Policy-Version")
             allowCredentials = true
             appConfig.corsAllowedOrigins.forEach { origin ->
                 runCatching {
@@ -402,6 +419,16 @@ fun Application.module() {
     configureRateLimiting(appConfig)
 
     val abacPolicyEngine = DefaultAbacPolicyEngine()
+
+    install(DeviceCapabilityEnforcement) {
+        this.auditTrailService = auditTrailService
+        this.policyRepository = devicePolicyRepository
+        allowlistPaths += Regex("^/auth/login$")
+        allowlistPaths += Regex("^/api/v1/device-policy$")
+        allowlistPaths += Regex("^/api/v1/device/register$")
+        allowlistPaths += Regex("^/health.*")
+        mappings += defaultDeviceCapabilityMappings()
+    }
 
     // Dependency Graph for Clean Routes
     val cleanTelemetrySnapshotService = InMemoryTelemetrySnapshotService()
@@ -512,6 +539,7 @@ fun Application.module() {
                 val jwtAuthInterceptor = GrpcJwtAuthInterceptor(jwtVerifier)
                 val tenantInterceptor = com.neogenesis.server.infrastructure.grpc.GrpcTenantInterceptor()
                 val tracingInterceptor = GrpcCorrelationTracingInterceptor(openTelemetry)
+                val deviceInterceptor = GrpcDeviceContext.interceptor(devicePolicyRepository)
 
                 val grpcService = BioPrintGrpcService(cleanTelemetryProcessingService)
                 val bioPrintServiceDefinition =
@@ -520,6 +548,7 @@ fun Application.module() {
                         jwtAuthInterceptor,
                         tenantInterceptor,
                         tracingInterceptor,
+                        deviceInterceptor,
                     )
 
                 val protocolServiceDefinition =
@@ -528,6 +557,7 @@ fun Application.module() {
                         jwtAuthInterceptor,
                         tenantInterceptor,
                         tracingInterceptor,
+                        deviceInterceptor,
                     )
                 val runServiceDefinition =
                     ServerInterceptors.intercept(
@@ -535,6 +565,7 @@ fun Application.module() {
                         jwtAuthInterceptor,
                         tenantInterceptor,
                         tracingInterceptor,
+                        deviceInterceptor,
                     )
 
                 val protocolV1ServiceDefinition =
@@ -543,6 +574,7 @@ fun Application.module() {
                         jwtAuthInterceptor,
                         tenantInterceptor,
                         tracingInterceptor,
+                        deviceInterceptor,
                     )
                 val runV1ServiceDefinition =
                     ServerInterceptors.intercept(
@@ -550,6 +582,7 @@ fun Application.module() {
                         jwtAuthInterceptor,
                         tenantInterceptor,
                         tracingInterceptor,
+                        deviceInterceptor,
                     )
                 val gatewayServiceDefinition =
                     ServerInterceptors.intercept(
@@ -557,6 +590,7 @@ fun Application.module() {
                         jwtAuthInterceptor,
                         tenantInterceptor,
                         tracingInterceptor,
+                        deviceInterceptor,
                     )
                 val metricsServiceDefinition =
                     ServerInterceptors.intercept(
@@ -564,6 +598,15 @@ fun Application.module() {
                         jwtAuthInterceptor,
                         tenantInterceptor,
                         tracingInterceptor,
+                        deviceInterceptor,
+                    )
+                val devicePolicyDefinition =
+                    ServerInterceptors.intercept(
+                        DevicePolicyGrpcService(devicePolicyRepository),
+                        jwtAuthInterceptor,
+                        tenantInterceptor,
+                        tracingInterceptor,
+                        deviceInterceptor,
                     )
 
                 val runtime =
@@ -579,6 +622,7 @@ fun Application.module() {
                                 runV1ServiceDefinition,
                                 gatewayServiceDefinition,
                                 metricsServiceDefinition,
+                                devicePolicyDefinition,
                             ),
                     )
                 runtime.server.start()
@@ -605,6 +649,7 @@ fun Application.module() {
     }
 
     routing {
+        devicePolicyRoutes(policyRepository = devicePolicyRepository)
         healthModule(
             dataSource = dataSource,
             metrics = metrics,
@@ -809,3 +854,4 @@ private fun readServerVersion(): String {
         File("backend/VERSION").readText(Charsets.UTF_8).trim()
     }.getOrElse { "1.0.0" }
 }
+

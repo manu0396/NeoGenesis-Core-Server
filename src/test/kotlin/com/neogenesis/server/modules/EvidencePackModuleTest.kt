@@ -1,5 +1,7 @@
 package com.neogenesis.server.modules
 
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
 import com.neogenesis.server.module
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -15,6 +17,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.neogenesis.server.addDeviceHeaders
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -29,14 +32,16 @@ class EvidencePackModuleTest {
                 module()
             }
 
-            val token = loginAndGetToken()
+            val token = issueToken(roles = listOf("ADMIN"), tenantId = "tenant-a")
             client.post("/devices") {
                 header(HttpHeaders.Authorization, "Bearer $token")
+                addDeviceHeaders()
                 contentType(ContentType.Application.Json)
                 setBody("""{"id":"dev-e1","name":"Device 1","tenantId":"tenant-a"}""")
             }
             client.post("/jobs") {
                 header(HttpHeaders.Authorization, "Bearer $token")
+                addDeviceHeaders()
                 contentType(ContentType.Application.Json)
                 setBody("""{"id":"job-e1","deviceId":"dev-e1","tenantId":"tenant-a"}""")
             }
@@ -66,14 +71,16 @@ class EvidencePackModuleTest {
                 module()
             }
 
-            val token = loginAndGetToken()
+            val token = issueToken(roles = listOf("ADMIN"), tenantId = "tenant-a")
             client.post("/devices") {
                 header(HttpHeaders.Authorization, "Bearer $token")
+                addDeviceHeaders()
                 contentType(ContentType.Application.Json)
                 setBody("""{"id":"dev-e2","name":"Device 2","tenantId":"tenant-a"}""")
             }
             client.post("/jobs") {
                 header(HttpHeaders.Authorization, "Bearer $token")
+                addDeviceHeaders()
                 contentType(ContentType.Application.Json)
                 setBody("""{"id":"job-e2","deviceId":"dev-e2","tenantId":"tenant-a"}""")
             }
@@ -93,16 +100,14 @@ class EvidencePackModuleTest {
             assertEquals(HttpStatusCode.OK, ok.status)
         }
 
-    private suspend fun io.ktor.server.testing.ApplicationTestBuilder.loginAndGetToken(): String {
-        val response =
-            client.post("/auth/login") {
-                contentType(ContentType.Application.Json)
-                setBody("""{"username":"admin","password":"admin-password"}""")
-            }
-        assertEquals(HttpStatusCode.OK, response.status)
-        return Json.parseToJsonElement(response.body<String>())
-            .jsonObject["accessToken"]!!
-            .jsonPrimitive.content
+    private fun issueToken(roles: List<String>, tenantId: String): String {
+        return JWT.create()
+            .withIssuer(TEST_ISSUER)
+            .withAudience(TEST_AUDIENCE)
+            .withSubject("test-user")
+            .withClaim("roles", roles)
+            .withClaim("tenantId", tenantId)
+            .sign(Algorithm.HMAC256(TEST_SECRET))
     }
 
     private fun testConfig(): MapApplicationConfig {
@@ -114,9 +119,9 @@ class EvidencePackModuleTest {
             "neogenesis.database.password" to "",
             "neogenesis.database.maximumPoolSize" to "2",
             "neogenesis.database.migrateOnStartup" to "true",
-            "neogenesis.security.jwt.secret" to "integration-test-secret-12345678901234567890",
-            "neogenesis.security.jwt.issuer" to "integration-test-issuer",
-            "neogenesis.security.jwt.audience" to "integration-test-audience",
+            "neogenesis.security.jwt.secret" to TEST_SECRET,
+            "neogenesis.security.jwt.issuer" to TEST_ISSUER,
+            "neogenesis.security.jwt.audience" to TEST_AUDIENCE,
             "neogenesis.security.jwt.realm" to "NeoGenesis",
             "neogenesis.adminBootstrap.enabled" to "true",
             "neogenesis.adminBootstrap.user" to "admin",
@@ -124,5 +129,11 @@ class EvidencePackModuleTest {
             "neogenesis.evidence.pack.mode" to "true",
             "neogenesis.audit.bundle.mode" to "true",
         )
+    }
+
+    companion object {
+        private const val TEST_ISSUER = "integration-test-issuer"
+        private const val TEST_AUDIENCE = "integration-test-audience"
+        private const val TEST_SECRET = "integration-test-secret-12345678901234567890"
     }
 }

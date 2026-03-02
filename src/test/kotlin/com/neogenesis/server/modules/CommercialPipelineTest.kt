@@ -1,5 +1,7 @@
-ï»¿package com.neogenesis.server.modules
+package com.neogenesis.server.modules
 
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
 import com.neogenesis.server.module
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -15,6 +17,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.neogenesis.server.addDeviceHeaders
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -30,12 +33,13 @@ class CommercialPipelineTest {
                 module()
             }
 
-            val token = loginAndGetToken()
+            val token = issueToken(roles = listOf("ADMIN"), tenantId = "tenant-a")
             val correlationId = "corr-123"
 
             val accountResponse =
                 client.post("/commercial/accounts") {
                     header(HttpHeaders.Authorization, "Bearer $token")
+                    addDeviceHeaders()
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -53,6 +57,7 @@ class CommercialPipelineTest {
             val oppResponse =
                 client.post("/commercial/opportunities") {
                     header(HttpHeaders.Authorization, "Bearer $token")
+                    addDeviceHeaders()
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -75,6 +80,7 @@ class CommercialPipelineTest {
             val loiResponse =
                 client.post("/commercial/lois") {
                     header(HttpHeaders.Authorization, "Bearer $token")
+                    addDeviceHeaders()
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -83,7 +89,7 @@ class CommercialPipelineTest {
                           "correlationId":"$correlationId",
                           "opportunityId":"$opportunityId",
                           "status":"draft",
-                          "amountRange":"â‚¬100k-â‚¬250k",
+                          "amountRange":"€100k-€250k",
                           "attachmentRef":"s3://loi/acme.pdf"
                         }
                         """.trimIndent(),
@@ -101,16 +107,14 @@ class CommercialPipelineTest {
             assertTrue(csv.contains(opportunityId))
         }
 
-    private suspend fun io.ktor.server.testing.ApplicationTestBuilder.loginAndGetToken(): String {
-        val response =
-            client.post("/auth/login") {
-                contentType(ContentType.Application.Json)
-                setBody("""{"username":"admin","password":"admin-password"}""")
-            }
-        assertEquals(HttpStatusCode.OK, response.status)
-        return Json.parseToJsonElement(response.body<String>())
-            .jsonObject["accessToken"]!!
-            .jsonPrimitive.content
+    private fun issueToken(roles: List<String>, tenantId: String): String {
+        return JWT.create()
+            .withIssuer(TEST_ISSUER)
+            .withAudience(TEST_AUDIENCE)
+            .withSubject("test-user")
+            .withClaim("roles", roles)
+            .withClaim("tenantId", tenantId)
+            .sign(Algorithm.HMAC256(TEST_SECRET))
     }
 
     private fun testConfig(): MapApplicationConfig {
@@ -122,14 +126,20 @@ class CommercialPipelineTest {
             "neogenesis.database.password" to "",
             "neogenesis.database.maximumPoolSize" to "2",
             "neogenesis.database.migrateOnStartup" to "true",
-            "neogenesis.security.jwt.secret" to "integration-test-secret-12345678901234567890",
-            "neogenesis.security.jwt.issuer" to "integration-test-issuer",
-            "neogenesis.security.jwt.audience" to "integration-test-audience",
+            "neogenesis.security.jwt.secret" to TEST_SECRET,
+            "neogenesis.security.jwt.issuer" to TEST_ISSUER,
+            "neogenesis.security.jwt.audience" to TEST_AUDIENCE,
             "neogenesis.security.jwt.realm" to "NeoGenesis",
             "neogenesis.adminBootstrap.enabled" to "true",
             "neogenesis.adminBootstrap.user" to "admin",
             "neogenesis.adminBootstrap.password" to "admin-password",
             "neogenesis.commercial.mode" to "true",
         )
+    }
+
+    companion object {
+        private const val TEST_ISSUER = "integration-test-issuer"
+        private const val TEST_AUDIENCE = "integration-test-audience"
+        private const val TEST_SECRET = "integration-test-secret-12345678901234567890"
     }
 }

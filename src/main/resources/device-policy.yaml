@@ -1,0 +1,9 @@
+version: 1
+minAppVersion: "1.0.0"
+allowTier3Alerts: false
+tierCaps:
+  TIER_2: [LIVE_MONITOR, READ_ONLY_DASHBOARD, ALERTS, QC_REVIEW]
+  TIER_3: [READ_ONLY_DASHBOARD]
+classCaps:
+  TV_DISPLAY: [READ_ONLY_DASHBOARD]
+

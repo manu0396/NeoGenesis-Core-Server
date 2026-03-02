@@ -1,4 +1,4 @@
-﻿package com.neogenesis.server.infrastructure.grpc
+package com.neogenesis.server.infrastructure.grpc
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
@@ -20,6 +20,7 @@ import com.neogenesis.grpc.StartRunRequest
 import com.neogenesis.grpc.StreamRunEventsRequest
 import com.neogenesis.server.application.regenops.RegenOpsService
 import com.neogenesis.server.infrastructure.config.AppConfig
+import com.neogenesis.server.infrastructure.device.DevicePolicyRepository
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenGatewayGrpcService
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenMetricsGrpcService
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenProtocolGrpcService
@@ -56,6 +57,8 @@ class RegenOpsHappyPathIntegrationTest {
                 ),
             ).initialize()
 
+        GrpcCapabilityGuard.auditTrailService = null
+
         val regenOpsService = RegenOpsService(JdbcRegenOpsStore(dataSource))
         val verifier =
             JWT.require(Algorithm.HMAC256(TEST_SECRET))
@@ -64,15 +67,16 @@ class RegenOpsHappyPathIntegrationTest {
                 .build()
 
         val authInterceptor = GrpcJwtAuthInterceptor(verifier)
+        val deviceInterceptor = GrpcDeviceContext.interceptor(DevicePolicyRepository())
 
         val serverName = InProcessServerBuilder.generateName()
         val server =
             InProcessServerBuilder.forName(serverName)
                 .directExecutor()
-                .addService(ServerInterceptors.intercept(RegenProtocolGrpcService(regenOpsService), authInterceptor))
-                .addService(ServerInterceptors.intercept(RegenRunGrpcService(regenOpsService), authInterceptor))
-                .addService(ServerInterceptors.intercept(RegenGatewayGrpcService(regenOpsService), authInterceptor))
-                .addService(ServerInterceptors.intercept(RegenMetricsGrpcService(regenOpsService), authInterceptor))
+                .addService(ServerInterceptors.intercept(RegenProtocolGrpcService(regenOpsService), authInterceptor, deviceInterceptor))
+                .addService(ServerInterceptors.intercept(RegenRunGrpcService(regenOpsService), authInterceptor, deviceInterceptor))
+                .addService(ServerInterceptors.intercept(RegenGatewayGrpcService(regenOpsService), authInterceptor, deviceInterceptor))
+                .addService(ServerInterceptors.intercept(RegenMetricsGrpcService(regenOpsService), authInterceptor, deviceInterceptor))
                 .build()
                 .start()
 
@@ -216,6 +220,7 @@ class RegenOpsHappyPathIntegrationTest {
                 assertTrue(report.evidenceChainValid)
             }
         } finally {
+            GrpcCapabilityGuard.auditTrailService = null
             channel.shutdownNow()
             server.shutdownNow()
             if (dataSource is AutoCloseable) {
@@ -244,6 +249,11 @@ class RegenOpsHappyPathIntegrationTest {
         val metadata =
             Metadata().apply {
                 put(AUTHORIZATION_HEADER, "Bearer $token")
+                put(DEVICE_CLASS_HEADER, "WINDOWS_DESKTOP")
+                put(DEVICE_TIER_HEADER, "TIER_1")
+                put(DEVICE_ID_HEADER, "test-device-1")
+                put(APP_VERSION_HEADER, "1.0.0-test")
+                put(PLATFORM_HEADER, "desktop")
             }
         return ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(metadata))
     }
@@ -254,5 +264,19 @@ class RegenOpsHappyPathIntegrationTest {
         private const val TEST_SECRET = "regenops-integration-secret-with-at-least-32-chars"
         private val AUTHORIZATION_HEADER: Metadata.Key<String> =
             Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_ID_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-id", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_CLASS_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-class", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_TIER_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-tier", Metadata.ASCII_STRING_MARSHALLER)
+        private val APP_VERSION_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-app-version", Metadata.ASCII_STRING_MARSHALLER)
+        private val PLATFORM_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-platform", Metadata.ASCII_STRING_MARSHALLER)
     }
 }
+
+
+
+

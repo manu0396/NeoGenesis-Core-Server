@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package com.neogenesis.device.policy;
+
+option java_multiple_files = true;
+option java_package = "com.neogenesis.device.policy";
+option java_outer_classname = "DevicePolicyProto";
+
+import "google/protobuf/empty.proto";
+
+message DeviceInfo {
+  string deviceId = 1;
+  string deviceClass = 2;
+  string tier = 3;
+  string appVersion = 4;
+  string platform = 5;
+  string model = 6;
+  string osVersion = 7;
+  int32 policyVersion = 8;
+}
+
+message DevicePolicy {
+  int32 version = 1;
+  string minAppVersion = 2;
+  map<string, CapabilitySet> tierCaps = 3;
+  map<string, CapabilitySet> classCaps = 4;
+  bool allowTier3Alerts = 5;
+}
+
+message CapabilitySet {
+  repeated string capabilities = 1;
+}
+
+service DevicePolicyService {
+  rpc GetDevicePolicy(google.protobuf.Empty) returns (DevicePolicy);
+  rpc RegisterDevice(DeviceInfo) returns (DevicePolicy);
+}
+

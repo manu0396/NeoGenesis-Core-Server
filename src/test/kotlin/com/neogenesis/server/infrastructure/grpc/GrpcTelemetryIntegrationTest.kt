@@ -14,6 +14,7 @@ import com.neogenesis.server.application.telemetry.TelemetryProcessingService
 import com.neogenesis.server.application.twin.DigitalTwinService
 import com.neogenesis.server.domain.policy.DefaultTelemetrySafetyPolicy
 import com.neogenesis.server.infrastructure.config.AppConfig
+import com.neogenesis.server.infrastructure.device.DevicePolicyRepository
 import com.neogenesis.server.infrastructure.observability.OperationalMetricsService
 import com.neogenesis.server.infrastructure.persistence.DatabaseFactory
 import com.neogenesis.server.infrastructure.persistence.JdbcAuditEventStore
@@ -23,6 +24,7 @@ import com.neogenesis.server.infrastructure.persistence.JdbcLatencyBreachStore
 import com.neogenesis.server.infrastructure.persistence.JdbcPrintSessionStore
 import com.neogenesis.server.infrastructure.persistence.JdbcRetinalPlanStore
 import com.neogenesis.server.infrastructure.persistence.JdbcTelemetryEventStore
+import com.neogenesis.server.infrastructure.grpc.GrpcDeviceContext
 import io.grpc.ClientInterceptors
 import io.grpc.Metadata
 import io.grpc.StatusException
@@ -105,6 +107,7 @@ class GrpcTelemetryIntegrationTest {
         val meterRegistry = SimpleMeterRegistry()
         val metricsService = OperationalMetricsService(meterRegistry)
         val auditTrailService = AuditTrailService(JdbcAuditEventStore(dataSource), metricsService)
+        GrpcCapabilityGuard.auditTrailService = null
         val telemetryEventStore = JdbcTelemetryEventStore(dataSource)
         val commandStore = JdbcControlCommandStore(dataSource)
         val telemetryProcessingService =
@@ -141,6 +144,7 @@ class GrpcTelemetryIntegrationTest {
             io.grpc.ServerInterceptors.intercept(
                 BioPrintGrpcService(telemetryProcessingService).bindService(),
                 GrpcJwtAuthInterceptor(verifier),
+                GrpcDeviceContext.interceptor(DevicePolicyRepository()),
             )
 
         val serverName = InProcessServerBuilder.generateName()
@@ -198,18 +202,23 @@ class GrpcTelemetryIntegrationTest {
         }
 
         fun stubWithToken(token: String?): BioPrintServiceGrpcKt.BioPrintServiceCoroutineStub {
-            if (token.isNullOrBlank()) {
-                return BioPrintServiceGrpcKt.BioPrintServiceCoroutineStub(channel)
-            }
             val metadata =
                 Metadata().apply {
-                    put(AUTHORIZATION_HEADER, "Bearer $token")
+                    if (!token.isNullOrBlank()) {
+                        put(AUTHORIZATION_HEADER, "Bearer $token")
+                    }
+                    put(DEVICE_CLASS_HEADER, "WINDOWS_DESKTOP")
+                    put(DEVICE_TIER_HEADER, "TIER_1")
+                    put(DEVICE_ID_HEADER, "test-device-1")
+                    put(APP_VERSION_HEADER, "1.0.0-test")
+                    put(PLATFORM_HEADER, "desktop")
                 }
             val intercepted = ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(metadata))
             return BioPrintServiceGrpcKt.BioPrintServiceCoroutineStub(intercepted)
         }
 
         override fun close() {
+            GrpcCapabilityGuard.auditTrailService = null
             channel.shutdownNow()
             server.shutdownNow()
             if (dataSource is AutoCloseable) {
@@ -224,5 +233,20 @@ class GrpcTelemetryIntegrationTest {
         private const val TEST_SECRET = "integration-test-secret-with-at-least-32-chars"
         private val AUTHORIZATION_HEADER: Metadata.Key<String> =
             Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_ID_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-id", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_CLASS_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-class", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_TIER_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-tier", Metadata.ASCII_STRING_MARSHALLER)
+        private val APP_VERSION_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-app-version", Metadata.ASCII_STRING_MARSHALLER)
+        private val PLATFORM_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-platform", Metadata.ASCII_STRING_MARSHALLER)
     }
 }
+
+
+
+
+

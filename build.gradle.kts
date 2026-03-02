@@ -17,6 +17,7 @@ val otelVersion = "1.43.0"
 val nettyVersion = "4.1.124.Final"
 val postgresqlVersion = "42.7.7"
 val stripeVersion = "25.5.0"
+val snakeYamlVersion = "2.2"
 
 plugins {
     application
@@ -94,6 +95,7 @@ dependencies {
     implementation("io.micrometer:micrometer-registry-prometheus:$micrometerVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
+    implementation("org.yaml:snakeyaml:$snakeYamlVersion")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host-jvm:$ktorVersion")

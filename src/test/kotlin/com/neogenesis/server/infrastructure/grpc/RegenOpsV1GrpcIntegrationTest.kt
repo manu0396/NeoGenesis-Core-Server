@@ -11,6 +11,7 @@ import com.neogenesis.platform.proto.v1.StartRunRequest
 import com.neogenesis.server.application.regenops.RegenOpsService
 import com.neogenesis.server.application.regenops.RegenTelemetryPoint
 import com.neogenesis.server.infrastructure.config.AppConfig
+import com.neogenesis.server.infrastructure.device.DevicePolicyRepository
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenProtocolV1GrpcService
 import com.neogenesis.server.infrastructure.grpc.regenops.RegenRunV1GrpcService
 import com.neogenesis.server.infrastructure.persistence.DatabaseFactory
@@ -55,13 +56,14 @@ class RegenOpsV1GrpcIntegrationTest {
                 .build()
 
         val authInterceptor = GrpcJwtAuthInterceptor(verifier)
+        val deviceInterceptor = GrpcDeviceContext.interceptor(DevicePolicyRepository())
 
         val serverName = InProcessServerBuilder.generateName()
         val server =
             InProcessServerBuilder.forName(serverName)
                 .directExecutor()
-                .addService(ServerInterceptors.intercept(RegenProtocolV1GrpcService(regenOpsService), authInterceptor))
-                .addService(ServerInterceptors.intercept(RegenRunV1GrpcService(regenOpsService), authInterceptor))
+                .addService(ServerInterceptors.intercept(RegenProtocolV1GrpcService(regenOpsService), authInterceptor, deviceInterceptor))
+                .addService(ServerInterceptors.intercept(RegenRunV1GrpcService(regenOpsService), authInterceptor, deviceInterceptor))
                 .build()
                 .start()
 
@@ -164,6 +166,7 @@ class RegenOpsV1GrpcIntegrationTest {
                 assertTrue(telemetry.any { it.pidP == 0.12 })
             }
         } finally {
+            GrpcCapabilityGuard.auditTrailService = null
             channel.shutdownNow()
             server.shutdownNow()
             if (dataSource is AutoCloseable) {
@@ -192,6 +195,11 @@ class RegenOpsV1GrpcIntegrationTest {
         val metadata =
             Metadata().apply {
                 put(AUTHORIZATION_HEADER, "Bearer $token")
+                put(DEVICE_CLASS_HEADER, "WINDOWS_DESKTOP")
+                put(DEVICE_TIER_HEADER, "TIER_1")
+                put(DEVICE_ID_HEADER, "test-device-1")
+                put(APP_VERSION_HEADER, "1.0.0-test")
+                put(PLATFORM_HEADER, "desktop")
             }
         return ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(metadata))
     }
@@ -202,5 +210,19 @@ class RegenOpsV1GrpcIntegrationTest {
         private const val TEST_SECRET = "regenops-integration-secret-with-at-least-32-chars"
         private val AUTHORIZATION_HEADER: Metadata.Key<String> =
             Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_ID_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-id", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_CLASS_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-class", Metadata.ASCII_STRING_MARSHALLER)
+        private val DEVICE_TIER_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-device-tier", Metadata.ASCII_STRING_MARSHALLER)
+        private val APP_VERSION_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-app-version", Metadata.ASCII_STRING_MARSHALLER)
+        private val PLATFORM_HEADER: Metadata.Key<String> =
+            Metadata.Key.of("x-platform", Metadata.ASCII_STRING_MARSHALLER)
     }
 }
+
+
+
+

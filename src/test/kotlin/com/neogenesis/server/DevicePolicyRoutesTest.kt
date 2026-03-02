@@ -1,13 +1,10 @@
-package com.neogenesis.server.modules
+package com.neogenesis.server
 
-import com.neogenesis.server.module
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.config.MapApplicationConfig
@@ -15,13 +12,14 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import com.neogenesis.server.addDeviceHeaders
+import kotlinx.serialization.json.int
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
-class AdminApiModuleTest {
+class DevicePolicyRoutesTest {
     @Test
-    fun `admin api requires tenant and correlation`() =
+    fun `device policy endpoints return policy`() =
         testApplication {
             environment {
                 config = testConfig()
@@ -30,38 +28,36 @@ class AdminApiModuleTest {
                 module()
             }
 
-            val token = loginAndGetToken()
-            val missingTenant =
-                client.get("/admin/roles") {
-                    header(HttpHeaders.Authorization, "Bearer $token")
-                    addDeviceHeaders()
-                    header("X-Correlation-Id", "corr-1")
-                }
-            assertEquals(HttpStatusCode.BadRequest, missingTenant.status)
+            val response = client.get("/api/v1/device-policy")
+            assertEquals(HttpStatusCode.OK, response.status)
+            val json = Json.parseToJsonElement(response.body<String>()).jsonObject
+            assertTrue(json["version"]!!.jsonPrimitive.int >= 1)
 
-            val ok =
-                client.get("/admin/roles?tenant_id=tenant-a") {
-                    header(HttpHeaders.Authorization, "Bearer $token")
-                    addDeviceHeaders()
-                    header("X-Correlation-Id", "corr-1")
+            val register =
+                client.post("/api/v1/device/register") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {
+                          "deviceId":"test-device-1",
+                          "deviceClass":"WINDOWS_DESKTOP",
+                          "tier":"TIER_1",
+                          "appVersion":"1.0.0",
+                          "platform":"desktop",
+                          "model":"test",
+                          "osVersion":"test-os",
+                          "policyVersion":1
+                        }
+                        """.trimIndent(),
+                    )
                 }
-            assertEquals(HttpStatusCode.OK, ok.status)
+            assertEquals(HttpStatusCode.OK, register.status)
+            val regJson = Json.parseToJsonElement(register.body<String>()).jsonObject
+            assertTrue(regJson["version"]!!.jsonPrimitive.int >= 1)
         }
 
-    private suspend fun io.ktor.server.testing.ApplicationTestBuilder.loginAndGetToken(): String {
-        val response =
-            client.post("/auth/login") {
-                contentType(ContentType.Application.Json)
-                setBody("""{"username":"admin","password":"admin-password"}""")
-            }
-        assertEquals(HttpStatusCode.OK, response.status)
-        return Json.parseToJsonElement(response.body<String>())
-            .jsonObject["accessToken"]!!
-            .jsonPrimitive.content
-    }
-
     private fun testConfig(): MapApplicationConfig {
-        val dbUrl = "jdbc:h2:mem:admin-api-${System.nanoTime()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"
+        val dbUrl = "jdbc:h2:mem:device-policy-${System.nanoTime()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"
         return MapApplicationConfig(
             "neogenesis.runtime.environment" to "test",
             "neogenesis.database.jdbcUrl" to dbUrl,
@@ -76,7 +72,8 @@ class AdminApiModuleTest {
             "neogenesis.adminBootstrap.enabled" to "true",
             "neogenesis.adminBootstrap.user" to "admin",
             "neogenesis.adminBootstrap.password" to "admin-password",
-            "neogenesis.admin.api.mode" to "true",
         )
     }
 }
+
+
