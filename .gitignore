@@ -5,6 +5,9 @@
 # 1. Gradle - Sistema de Construcción
 .gradle/
 .gradle-user/
+.kotlin/
+.m2/
+.android/
 build/
 # (Opcional) Ignorar el directorio de configuración local de Gradle si existe
 gradle-local.properties
@@ -49,6 +52,10 @@ deploy/local/tls/
 # ya que se generará dinámicamente en cada compilación.
 **/generated/source/proto/
 *.patch
+
+# Additional build caches
+**/build/
+buildSrc/.gradle/
 
 #Gemini
 gemini/settings.json
